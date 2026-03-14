@@ -32,7 +32,7 @@ logo = f'''
 '    ╚══════╝╚═╝     ╚═╝ ╚═════╝  ╚════╝ ╚═╝╚══════╝   {S}'''
 
 fb_link = "https://www.facebook.com/profile.php?id=61583439715339"
-version = "Version 1.0 (Fixed)"
+version = "Version 2.0 (Final Fixed)"
 
 def clear():
     os.system('clear' if 'linux' in sys.platform.lower() else 'cls')
@@ -61,19 +61,24 @@ def checking(cookie):
         rq1 = requests.get(url, headers=head, allow_redirects=True, timeout=30)
         rp1 = rq1.text.replace("\\", "")
         final_url = rq1.url
-        if final_url == "https://accountscenter.facebook.com/profiles":
-            pass
-        else:
+        
+        if final_url != "https://accountscenter.facebook.com/profiles":
             return {"status": "fail", "message": "Cookie Invalid or Expired"}
-        try:
-            IG_uname = re.search(r'"identity_type"\s*:\s*"IG_USER".*?"username"\s*:\s*"([^"]+)"', str(rp1)).group(1)
-        except AttributeError:
+        
+        # Get Instagram username
+        ig_match = re.search(r'"identity_type"\s*:\s*"IG_USER".*?"username"\s*:\s*"([^"]+)"', str(rp1))
+        if not ig_match:
             return {"status": "fail", "message": "Instagram Account Not Linked"}
-        try:
-            uid = re.search(r'"actorID"\s*:\s*"(\d+)"', str(rp1)).group(1)
-        except AttributeError:
+        IG_uname = ig_match.group(1)
+        
+        # Get Facebook UID
+        uid_match = re.search(r'"actorID"\s*:\s*"(\d+)"', str(rp1))
+        if not uid_match:
             return {"status": "fail", "message": "Failed to get user_id"}
+        uid = uid_match.group(1)
+        
         return {"status": "success", "uid": uid, "ig_uname": IG_uname}
+        
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
     except requests.exceptions.Timeout:
@@ -81,7 +86,7 @@ def checking(cookie):
     except Exception as e:
         return {"status": "fail", "message": str(e)}
 
-def step1(cookie, uid):
+def get_tokens(cookie, uid):
     try:
         head = {
             "Host": "accountscenter.facebook.com",
@@ -100,13 +105,21 @@ def step1(cookie, uid):
         url = f"https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{uid}"
         rq1 = requests.get(url, headers=head, timeout=30)
         rp1 = rq1.text.replace("\\", "")
-        try:
-            fb_dtsg = re.search(r'\["DTSGInitialData".*?\{[^}]*"token"\s*:\s*"([^"]+)"', str(rp1)).group(1)
-            lsd = re.search(r'\["LSD".*?"token"\s*:\s*"([^"]+)"', str(rp1)).group(1)
-            fbid_v2 = re.search(r'"__typename"\s*:\s*"XFBFXIGAccountInfo".*?"id"\s*:\s*"(\d+)"', str(rp1)).group(1)
-        except AttributeError:
-            return {"status": "fail", "message": "Cookie Invalid or Expired"}
+        
+        # Extract tokens
+        dtsg_match = re.search(r'\["DTSGInitialData".*?\{[^}]*"token"\s*:\s*"([^"]+)"', str(rp1))
+        lsd_match = re.search(r'\["LSD".*?"token"\s*:\s*"([^"]+)"', str(rp1))
+        fbid_match = re.search(r'"__typename"\s*:\s*"XFBFXIGAccountInfo".*?"id"\s*:\s*"(\d+)"', str(rp1))
+        
+        if not all([dtsg_match, lsd_match, fbid_match]):
+            return {"status": "fail", "message": "Failed to get tokens - Cookie may be invalid"}
+            
+        fb_dtsg = dtsg_match.group(1)
+        lsd = lsd_match.group(1)
+        fbid_v2 = fbid_match.group(1)
+        
         return {"status": "success", "DTSG": fb_dtsg, "LSD": lsd, "fbid_v2": fbid_v2}
+        
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
     except requests.exceptions.Timeout:
@@ -114,225 +127,7 @@ def step1(cookie, uid):
     except Exception as e:
         return {"status": "fail", "message": str(e)}
 
-def step2(cookie, uid, DTSG, LSD):
-    try:
-        head = {
-            "Host": "accountscenter.facebook.com",
-            "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://accountscenter.facebook.com",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate",
-            "Cache-Control": "no-cache"
-        }
-        
-        # Fixed mutation variables - this was the issue
-        variable = {
-            "input": {
-                "client_mutation_id": "1",
-                "actor_id": uid,
-                "enable_share_all_logins": True,  # Changed to True
-                "fdid": "device_id_fetch_datr"
-            }
-        }
-        
-        data = {
-            "locale": "en_US",
-            "__user": uid,
-            "fb_dtsg": DTSG,
-            "lsd": LSD,
-            "fb_api_caller_class": "RelayModern",
-            "fb_api_req_friendly_name": "useFXSSOChangeSettingMutation",
-            "server_timestamps": "true",
-            "doc_id": "9427448270675232",  # Fixed doc_id
-            "av": uid,
-            "variables": json.dumps(variable)
-        }
-        
-        url = "https://accountscenter.facebook.com/api/graphql"
-        response = requests.post(url, data=data, headers=head, timeout=30)
-        
-        # Check if response is JSON
-        try:
-            rp1 = response.json()
-        except:
-            return {"status": "fail", "message": "Invalid response from server"}
-        
-        # Better response checking
-        if "data" in rp1 and rp1["data"] is not None:
-            return {"status": "success"}
-        elif "errors" in rp1:
-            error_msg = rp1["errors"][0].get("message", "Unknown error")
-            if "reauth" in error_msg.lower() or "relink" in error_msg.lower():
-                return {"status": "fail", "message": "Please re-link Your Instagram Account"}
-            else:
-                return {"status": "fail", "message": f"Error: {error_msg}"}
-        else:
-            return {"status": "fail", "message": "An unknown error occurred"}
-            
-    except requests.exceptions.ConnectionError:
-        return {"status": "fail", "message": "Connection Error"}
-    except requests.exceptions.Timeout:
-        return {"status": "fail", "message": "Request Timeout"}
-    except Exception as e:
-        return {"status": "fail", "message": str(e)}
-
-def step3(cookie, uid, DTSG, LSD, fbid_v2):
-    try:
-        head = {
-            "Host": "accountscenter.facebook.com",
-            "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://accountscenter.facebook.com",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate",
-            "Cache-Control": "no-cache"
-        }
-        
-        variable = {
-            "input": {
-                "client_mutation_id": "1",
-                "actor_id": uid,
-                "enable_sso": True,
-                "initiator_account": {"id": uid, "type": "FACEBOOK"},
-                "target_account": {"id": fbid_v2, "type": "INSTAGRAM"},
-                "fdid": "device_id_fetch_datr"
-            }
-        }
-        
-        data = {
-            "locale": "en_US",
-            "__user": uid,
-            "fb_dtsg": DTSG,
-            "lsd": LSD,
-            "fb_api_caller_class": "RelayModern",
-            "fb_api_req_friendly_name": "useFXSSOChangeDirectionalSSOMutation",
-            "server_timestamps": "true",
-            "doc_id": "9253258021410000",  # Fixed doc_id
-            "av": uid,
-            "variables": json.dumps(variable)
-        }
-        
-        url = "https://accountscenter.facebook.com/api/graphql"
-        response = requests.post(url, data=data, headers=head, timeout=30)
-        
-        try:
-            rp1 = response.json()
-        except:
-            return {"status": "fail", "message": "Invalid response from server"}
-        
-        # Check for success
-        if "data" in rp1 and rp1["data"] is not None:
-            try:
-                sso_list = rp1["data"]["fxcal_settings_update_sso_status"]["updated_node"]["advanced_sso_settings"]["sso_status"]
-                if any("Can log in to" in str(status) for status in sso_list):
-                    return {"status": "success"}
-                else:
-                    return {"status": "fail", "message": "Failed to synchronize Facebook to Insta"}
-            except:
-                return {"status": "success"}  # Assume success if we got data
-        elif "errors" in rp1:
-            error_msg = rp1["errors"][0].get("message", "Unknown error")
-            if "reauth" in error_msg.lower() or "relink" in error_msg.lower():
-                return {"status": "fail", "message": "Please re-link Your Instagram Account"}
-            else:
-                return {"status": "fail", "message": f"Error: {error_msg}"}
-        else:
-            return {"status": "fail", "message": "An unknown error occurred"}
-            
-    except requests.exceptions.ConnectionError:
-        return {"status": "fail", "message": "Connection Error"}
-    except requests.exceptions.Timeout:
-        return {"status": "fail", "message": "Request Timeout"}
-    except Exception as e:
-        return {"status": "fail", "message": str(e)}
-
-def step4(cookie, uid, DTSG, LSD, fbid_v2):
-    try:
-        head = {
-            "Host": "accountscenter.facebook.com",
-            "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://accountscenter.facebook.com",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en",
-            "Accept-Encoding": "gzip, deflate",
-            "Cache-Control": "no-cache"
-        }
-        
-        variable = {
-            "input": {
-                "client_mutation_id": "1",
-                "actor_id": uid,
-                "enable_sso": True,
-                "initiator_account": {"id": fbid_v2, "type": "INSTAGRAM"},
-                "target_account": {"id": uid, "type": "FACEBOOK"},
-                "fdid": "device_id_fetch_datr"
-            }
-        }
-        
-        data = {
-            "locale": "en_US",
-            "__user": uid,
-            "fb_dtsg": DTSG,
-            "lsd": LSD,
-            "fb_api_caller_class": "RelayModern",
-            "fb_api_req_friendly_name": "useFXSSOChangeDirectionalSSOMutation",
-            "server_timestamps": "true",
-            "doc_id": "9253258021410000",  # Fixed doc_id
-            "av": uid,
-            "variables": json.dumps(variable)
-        }
-        
-        url = "https://accountscenter.facebook.com/api/graphql"
-        response = requests.post(url, data=data, headers=head, timeout=30)
-        
-        try:
-            rp1 = response.json()
-        except:
-            return {"status": "fail", "message": "Invalid response from server"}
-        
-        # Check for success
-        if "data" in rp1 and rp1["data"] is not None:
-            try:
-                sso_list = rp1["data"]["fxcal_settings_update_sso_status"]["updated_node"]["advanced_sso_settings"]["sso_status"]
-                if any("Can log in to" in str(status) for status in sso_list):
-                    return {"status": "success"}
-                else:
-                    return {"status": "fail", "message": "Failed to synchronize Instagram to Facebook"}
-            except:
-                return {"status": "success"}  # Assume success if we got data
-        elif "errors" in rp1:
-            error_msg = rp1["errors"][0].get("message", "Unknown error")
-            if "reauth" in error_msg.lower() or "relink" in error_msg.lower():
-                return {"status": "fail", "message": "Please re-link Your Facebook Account"}
-            else:
-                return {"status": "fail", "message": f"Error: {error_msg}"}
-        else:
-            return {"status": "fail", "message": "An unknown error occurred"}
-            
-    except requests.exceptions.ConnectionError:
-        return {"status": "fail", "message": "Connection Error"}
-    except requests.exceptions.Timeout:
-        return {"status": "fail", "message": "Request Timeout"}
-    except Exception as e:
-        return {"status": "fail", "message": str(e)}
-
-def step5(cookie, uid, DTSG, LSD, fbid_v2, name):
+def change_instagram_name(cookie, uid, DTSG, LSD, fbid_v2, name):
     try:
         head = {
             "Host": "accountscenter.facebook.com",
@@ -381,19 +176,18 @@ def step5(cookie, uid, DTSG, LSD, fbid_v2, name):
         except:
             return {"status": "fail", "message": "Invalid response from server"}
         
-        # Check for success
         if "data" in rp1 and rp1["data"] is not None:
             return {"status": "success"}
         elif "errors" in rp1:
             error_msg = rp1["errors"][0].get("message", "Unknown error")
             if "try again later" in error_msg.lower():
-                return {"status": "fail", "message": "Sorry We can't change your name, please try again later"}
+                return {"status": "fail", "message": "Cannot change name, try again later"}
             elif "reauth" in error_msg.lower() or "relink" in error_msg.lower():
-                return {"status": "fail", "message": "Please re-link Your Instagram Account"}
+                return {"status": "fail", "message": "Please re-link your accounts"}
             else:
                 return {"status": "fail", "message": f"Error: {error_msg}"}
         else:
-            return {"status": "fail", "message": "An unknown error occurred"}
+            return {"status": "fail", "message": "Unknown error occurred"}
             
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
@@ -402,7 +196,7 @@ def step5(cookie, uid, DTSG, LSD, fbid_v2, name):
     except Exception as e:
         return {"status": "fail", "message": str(e)}
 
-def step6(cookie, uid, DTSG, LSD, fbid_v2, name):
+def sync_name_across_accounts(cookie, uid, DTSG, LSD, fbid_v2, name):
     try:
         head = {
             "Host": "accountscenter.facebook.com",
@@ -455,22 +249,18 @@ def step6(cookie, uid, DTSG, LSD, fbid_v2, name):
         except:
             return {"status": "fail", "message": "Invalid response from server"}
         
-        # Check for success
         if "data" in rp1 and rp1["data"] is not None:
-            if name in str(rp1):
-                return {"status": "success"}
-            else:
-                return {"status": "success"}  # Assume success if we got data
+            return {"status": "success"}
         elif "errors" in rp1:
             error_msg = rp1["errors"][0].get("message", "Unknown error")
             if "try again later" in error_msg.lower():
-                return {"status": "fail", "message": "Sorry We can't change your name, please try again later"}
+                return {"status": "fail", "message": "Cannot sync name, try again later"}
             elif "reauth" in error_msg.lower() or "relink" in error_msg.lower():
-                return {"status": "fail", "message": "Please re-link Your Instagram Account"}
+                return {"status": "fail", "message": "Please re-link your accounts"}
             else:
                 return {"status": "fail", "message": f"Error: {error_msg}"}
         else:
-            return {"status": "fail", "message": "An unknown error occurred"}
+            return {"status": "fail", "message": "Unknown error occurred"}
             
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
@@ -480,185 +270,112 @@ def step6(cookie, uid, DTSG, LSD, fbid_v2, name):
         return {"status": "fail", "message": str(e)}
 
 def main():
-    clear()
-    print(logo)
-    print(f"{B}FB: {C}{fb_link}{S}")
-    print(f"{B}{version}{S}")
-    print("-" * 50)
-    print()
-    cookie = input(f"{B}[{R}?{B}] Facebook Cookie: {V}")
-    clear()
-    print(logo)
-    print(f"{B}FB: {C}{fb_link}{S}")
-    print(f"{B}{version}{S}")
-    print("-" * 50)
-    print()
-    print(f"{B}[+] Verifying your Facebook cookie...{S}")
-    check = checking(cookie=cookie)
-    if "success" in check["status"]:
+    try:
+        clear()
+        print(logo)
+        print(f"{B}FB: {C}{fb_link}{S}")
+        print(f"{B}{version}{S}")
+        print("-" * 50)
+        print()
+        
+        cookie = input(f"{B}[{R}?{B}] Facebook Cookie: {V}")
+        
+        clear()
+        print(logo)
+        print(f"{B}FB: {C}{fb_link}{S}")
+        print(f"{B}{version}{S}")
+        print("-" * 50)
+        print()
+        
+        print(f"{B}[+] Verifying your Facebook cookie...{S}")
+        check = checking(cookie=cookie)
+        
+        if check["status"] != "success":
+            error_msgs = {
+                "Cookie Invalid or Expired": "Your cookie is invalid or expired",
+                "Instagram Account Not Linked": "Please link an Instagram account first and try again",
+                "Failed to get user_id": "Your cookie is invalid or expired",
+                "Connection Error": "No internet connection",
+                "Request Timeout": "Request timeout, please try again"
+            }
+            print(f"{B}[{R}x{B}] {error_msgs.get(check['message'], check['message'])}{S}")
+            return
+        
         uid = check["uid"]
         ig_username = check["ig_uname"]
-    elif "fail" in check["status"]:
-        if "Cookie Invalid or Expired" in check['message']:
-            print(f"{B}[{R}x{B}] Your cookie is invalid or expired{S}")
-            exit()
-        elif "Instagram Account Not Linked" in check["message"]:
-            print(f"{B}[{R}x{B}] Please link an Instagram account first and try again{S}")
-            exit()
-        elif "Failed to get user_id" in check["message"]:
-            print(f"{B}[{R}x{B}] Your cookie is invalid or expired{S}")
-            exit()
-        elif "Connection Error" in check["message"]:
-            print(f"{B}[{R}x{B}] No internet connection{S}")
-            exit()
-        elif "Request Timeout" in check["message"]:
-            print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
-            exit()
-        else:
-            print(f"{B}[{R}x{B}] {check['message']}{S}")
-            exit()
-    
-    print(f"{B}[{V}✓{B}] Your cookie is active...{S}")
-    print(f"{B}[+] Getting your login tokens...{S}")
-    
-    s1 = step1(cookie=cookie, uid=uid)
-    if "success" in s1["status"]:
-        DTSG = s1["DTSG"]
-        LSD = s1["LSD"]
-        fbid_v2 = s1["fbid_v2"]
-    elif "fail" in s1["status"]:
-        if "Cookie Invalid or Expired" in s1["message"]:
-            print(f"{B}[{R}x{B}] Your cookie is invalid or expired{S}")
-            exit()
-        elif "Connection Error" in s1["message"]:
-            print(f"{B}[{R}x{B}] No internet connection{S}")
-            exit()
-        elif "Request Timeout" in s1["message"]:
-            print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
-            exit()
-        else:
-            print(f"{B}[{R}x{B}] {s1['message']}{S}")
-            exit()
-    
-    print(f"{B}[+] Configuring SSO settings...{S}")
-    s2 = step2(cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD)
-    if "success" in s2["status"]:
-        print(f"{B}[{V}✓{B}] SSO settings configured successfully{S}")
-    elif "fail" in s2["status"]:
-        if "Please re-link Your Instagram Account" in s2["message"]:
-            print(f"{B}[{R}x{B}] Please re-link your Instagram account{S}")
-            print(f"{B}[{R}!{B}] Open this link in your browser:{S}")
-            print(f"{C}https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{S}")
-            exit()
-        elif "Connection Error" in s2["message"]:
-            print(f"{B}[{R}x{B}] No internet connection{S}")
-            exit()
-        elif "Request Timeout" in s2["message"]:
-            print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
-            exit()
-        else:
-            print(f"{B}[{R}x{B}] {s2['message']}{S}")
-            exit()
-    
-    print(f"{B}[+] Synchronizing Facebook to Instagram...{S}")
-    s3 = step3(cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, fbid_v2=fbid_v2)
-    if "success" in s3['status']:
-        print(f"{B}[{V}✓{B}] Facebook to Instagram sync completed{S}")
-    elif "fail" in s3["status"]:
-        if "Please re-link Your Instagram Account" in s3["message"]:
-            print(f"{B}[{R}x{B}] Please re-link your Instagram account{S}")
-            print(f"{B}[{R}!{B}] Open this link in your browser:{S}")
-            print(f"{C}https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{S}")
-            exit()
-        elif "Failed to synchronize Facebook to Insta" in s3["message"]:
-            print(f"{B}[{R}x{B}] Synchronization failed{S}")
-            exit()
-        elif "Connection Error" in s3["message"]:
-            print(f"{B}[{R}x{B}] No internet connection{S}")
-            exit()
-        elif "Request Timeout" in s3["message"]:
-            print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
-            exit()
-        else:
-            print(f"{B}[{R}x{B}] {s3['message']}{S}")
-            exit()
-    
-    print(f"{B}[+] Synchronizing Instagram to Facebook...{S}")
-    s4 = step4(cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, fbid_v2=fbid_v2)
-    if "success" in s4['status']:
-        print(f"{B}[{V}✓{B}] Instagram to Facebook sync completed{S}")
-    elif "fail" in s4["status"]:
-        if "Please re-link Your Facebook Account" in s4["message"]:
-            print(f"{B}[{R}x{B}] Please re-link your Facebook account{S}")
-            print(f"{B}[{R}!{B}] Open this link in your browser:{S}")
-            print(f"{C}https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{S}")
-            exit()
-        elif "Failed to synchronize Instagram to Facebook" in s4["message"]:
-            print(f"{B}[{R}x{B}] Synchronization failed{S}")
-            exit()
-        elif "Connection Error" in s4["message"]:
-            print(f"{B}[{R}x{B}] No internet connection{S}")
-            exit()
-        elif "Request Timeout" in s4["message"]:
-            print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
-            exit()
-        else:
-            print(f"{B}[{R}x{B}] {s4['message']}{S}")
-            exit()
-    
-    print(f"{B}[{V}✓{B}] SSO Synchronization completed successfully!{S}")
-    print()
-    print(f"{B}[{V}!{B}] Instagram Username: {C}{ig_username}{S}")
-    print(f"{B}[{V}!{B}] Facebook ID: {C}{uid}{S}")
-    print()
-    
-    change_name = input(f"{B}[{R}?{B}] Do you want to change your name? (y/n): {V}")
-    if change_name.lower() == 'y':
-        new_name = input(f"{B}[{R}?{B}] Enter new name: {V}")
-        print(f"{B}[+] Changing Instagram name to {C}{new_name}{B}...{S}")
-        s5 = step5(cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, fbid_v2=fbid_v2, name=new_name)
-        if "success" in s5["status"]:
-            print(f"{B}[{V}✓{B}] Name changed successfully on Instagram!{S}")
-            print(f"{B}[+] Synchronizing name across accounts...{S}")
-            s6 = step6(cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, fbid_v2=fbid_v2, name=new_name)
-            if "success" in s6["status"]:
-                print(f"{B}[{V}✓{B}] Name synchronized successfully on both platforms!{S}")
-            elif "fail" in s6["status"]:
-                if "Please re-link Your Instagram Account" in s6["message"]:
-                    print(f"{B}[{R}x{B}] Please re-link your Instagram account{S}")
-                    print(f"{B}[{R}!{B}] Open this link in your browser:{S}")
-                    print(f"{C}https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{S}")
-                elif "Sorry We can't change your name, please try again later" in s6["message"]:
-                    print(f"{B}[{R}x{B}] Cannot change name, try again later{S}")
-                elif "Connection Error" in s6["message"]:
-                    print(f"{B}[{R}x{B}] No internet connection{S}")
-                elif "Request Timeout" in s6["message"]:
-                    print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
+        
+        print(f"{B}[{V}✓{B}] Your cookie is active{S}")
+        print(f"{B}[+] Getting access tokens...{S}")
+        
+        tokens = get_tokens(cookie=cookie, uid=uid)
+        
+        if tokens["status"] != "success":
+            error_msgs = {
+                "Failed to get tokens - Cookie may be invalid": "Your cookie is invalid or expired",
+                "Connection Error": "No internet connection",
+                "Request Timeout": "Request timeout, please try again"
+            }
+            print(f"{B}[{R}x{B}] {error_msgs.get(tokens['message'], tokens['message'])}{S}")
+            return
+        
+        DTSG = tokens["DTSG"]
+        LSD = tokens["LSD"]
+        fbid_v2 = tokens["fbid_v2"]
+        
+        print(f"{B}[{V}✓{B}] Tokens obtained successfully{S}")
+        print()
+        print(f"{B}[{V}!{B}] Instagram Username: {C}{ig_username}{S}")
+        print(f"{B}[{V}!{B}] Facebook ID: {C}{uid}{S}")
+        print(f"{B}[{V}!{B}] Instagram Account ID: {C}{fbid_v2}{S}")
+        print()
+        
+        change_name = input(f"{B}[{R}?{B}] Do you want to change your Instagram name? (y/n): {V}")
+        
+        if change_name.lower() == 'y':
+            new_name = input(f"{B}[{R}?{B}] Enter new name: {V}")
+            
+            print(f"{B}[+] Changing Instagram name to {C}{new_name}{B}...{S}")
+            name_change = change_instagram_name(
+                cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, 
+                fbid_v2=fbid_v2, name=new_name
+            )
+            
+            if name_change["status"] == "success":
+                print(f"{B}[{V}✓{B}] Name changed successfully on Instagram!{S}")
+                
+                print(f"{B}[+] Syncing name across both platforms...{S}")
+                sync = sync_name_across_accounts(
+                    cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD,
+                    fbid_v2=fbid_v2, name=new_name
+                )
+                
+                if sync["status"] == "success":
+                    print(f"{B}[{V}✓{B}] Name synced successfully on both platforms!{S}")
                 else:
-                    print(f"{B}[{R}x{B}] {s6['message']}{S}")
-        elif "fail" in s5["status"]:
-            if "Please re-link Your Instagram Account" in s5["message"]:
-                print(f"{B}[{R}x{B}] Please re-link your Instagram account{S}")
-                print(f"{B}[{R}!{B}] Open this link in your browser:{S}")
-                print(f"{C}https://accountscenter.facebook.com/connected_experiences/single_sign_on_dialog/{S}")
-            elif "Sorry We can't change your name, please try again later" in s5["message"]:
-                print(f"{B}[{R}x{B}] Cannot change name, try again later{S}")
-            elif "Connection Error" in s5["message"]:
-                print(f"{B}[{R}x{B}] No internet connection{S}")
-            elif "Request Timeout" in s5["message"]:
-                print(f"{B}[{R}x{B}] Request timeout, please try again{S}")
+                    error_msgs = {
+                        "Cannot sync name, try again later": "Cannot sync name, try again later",
+                        "Please re-link your accounts": "Please re-link your accounts",
+                        "Connection Error": "No internet connection",
+                        "Request Timeout": "Request timeout, please try again"
+                    }
+                    print(f"{B}[{R}x{B}] {error_msgs.get(sync['message'], sync['message'])}{S}")
+                    print(f"{B}[{V}!{B}] Name was changed on Instagram but may not be synced to Facebook{S}")
             else:
-                print(f"{B}[{R}x{B}] {s5['message']}{S}")
-    
-    print()
-    print(f"{B}[{V}✓{B}] Process completed!{S}")
-
-if __name__ == "__main__":
-    try:
-        main()
+                error_msgs = {
+                    "Cannot change name, try again later": "Cannot change name, try again later",
+                    "Please re-link your accounts": "Please re-link your accounts",
+                    "Connection Error": "No internet connection",
+                    "Request Timeout": "Request timeout, please try again"
+                }
+                print(f"{B}[{R}x{B}] {error_msgs.get(name_change['message'], name_change['message'])}{S}")
+        
+        print()
+        print(f"{B}[{V}✓{B}] Process completed successfully!{S}")
+        
     except KeyboardInterrupt:
         print(f"\n{B}[{R}!{B}] Process interrupted by user{S}")
-        sys.exit(0)
     except Exception as e:
         print(f"\n{B}[{R}!{B}] An error occurred: {e}{S}")
-        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
