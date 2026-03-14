@@ -32,7 +32,7 @@ logo = f'''
 '    ╚══════╝╚═╝     ╚═╝ ╚═════╝  ╚════╝ ╚═╝╚══════╝   {S}'''
 
 fb_link = "https://www.facebook.com/profile.php?id=61583439715339"
-version = "Version 2.0 (Final Fixed)"
+version = "Version 3.0 (Both Platforms Fixed)"
 
 def clear():
     os.system('clear' if 'linux' in sys.platform.lower() else 'cls')
@@ -77,7 +77,11 @@ def checking(cookie):
             return {"status": "fail", "message": "Failed to get user_id"}
         uid = uid_match.group(1)
         
-        return {"status": "success", "uid": uid, "ig_uname": IG_uname}
+        # Get Facebook name
+        fb_name_match = re.search(r'"name"\s*:\s*"([^"]+)"', str(rp1))
+        fb_name = fb_name_match.group(1) if fb_name_match else "Unknown"
+        
+        return {"status": "success", "uid": uid, "ig_uname": IG_uname, "fb_name": fb_name}
         
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
@@ -196,7 +200,7 @@ def change_instagram_name(cookie, uid, DTSG, LSD, fbid_v2, name):
     except Exception as e:
         return {"status": "fail", "message": str(e)}
 
-def sync_name_across_accounts(cookie, uid, DTSG, LSD, fbid_v2, name):
+def change_facebook_name(cookie, uid, DTSG, LSD, name):
     try:
         head = {
             "Host": "accountscenter.facebook.com",
@@ -215,30 +219,26 @@ def sync_name_across_accounts(cookie, uid, DTSG, LSD, fbid_v2, name):
         
         variable = {
             "client_mutation_id": str(uuid.uuid4()),
-            "accounts_to_sync": [fbid_v2, uid],
-            "resources_to_sync": ["NAME", "PROFILE_PHOTO"],
-            "resources_to_unsync": None,
-            "scale": 3,
-            "source_of_truth_array": [{"resource_source": "IG"}, {"resource_source": "FB"}],
-            "source_account": uid,
             "family_device_id": "device_id_fetch_datr",
-            "username_unsync_params": None,
-            "platform": "FACEBOOK",
-            "sync_logging_params": {"client_flow_type": "IM_SETTINGS"},
-            "interface": "FB_WEB",
-            "feta_profile_sync": False
+            "identity_ids": [uid],
+            "full_name": name,
+            "first_name": name,
+            "middle_name": "",
+            "last_name": "",
+            "interface": "FB_WEB"
         }
         
         data = {
             "locale": "en_US",
+            "fb_api_caller_class": "RelayModern",
             "fb_dtsg": DTSG,
-            "__user": uid,
+            "lsd": LSD,
+            "fb_api_req_friendly_name": "useFXIMUpdateNameMutation",
             "variables": json.dumps(variable),
             "av": uid,
-            "fb_api_req_friendly_name": "useFXIMUpdateNameMutation",
-            "fb_api_caller_class": "RelayModern",
+            "__user": uid,
             "server_timestamps": "true",
-            "doc_id": "9388416374608398"
+            "doc_id": "28573275658982428"
         }
         
         url = "https://accountscenter.facebook.com/api/graphql"
@@ -254,13 +254,94 @@ def sync_name_across_accounts(cookie, uid, DTSG, LSD, fbid_v2, name):
         elif "errors" in rp1:
             error_msg = rp1["errors"][0].get("message", "Unknown error")
             if "try again later" in error_msg.lower():
-                return {"status": "fail", "message": "Cannot sync name, try again later"}
+                return {"status": "fail", "message": "Cannot change name, try again later"}
             elif "reauth" in error_msg.lower() or "relink" in error_msg.lower():
                 return {"status": "fail", "message": "Please re-link your accounts"}
             else:
                 return {"status": "fail", "message": f"Error: {error_msg}"}
         else:
             return {"status": "fail", "message": "Unknown error occurred"}
+            
+    except requests.exceptions.ConnectionError:
+        return {"status": "fail", "message": "Connection Error"}
+    except requests.exceptions.Timeout:
+        return {"status": "fail", "message": "Request Timeout"}
+    except Exception as e:
+        return {"status": "fail", "message": str(e)}
+
+def sync_names(cookie, uid, DTSG, LSD, fbid_v2, name):
+    try:
+        head = {
+            "Host": "accountscenter.facebook.com",
+            "Cookie": cookie,
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://accountscenter.facebook.com",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Accept": "*/*",
+            "Accept-Language": "en-US",
+            "Accept-Encoding": "gzip, deflate",
+            "Cache-Control": "no-cache"
+        }
+        
+        # First sync direction: Instagram to Facebook
+        variable1 = {
+            "input": {
+                "client_mutation_id": "1",
+                "actor_id": uid,
+                "enable_sso": True,
+                "initiator_account": {"id": fbid_v2, "type": "INSTAGRAM"},
+                "target_account": {"id": uid, "type": "FACEBOOK"},
+                "fdid": "device_id_fetch_datr"
+            }
+        }
+        
+        data1 = {
+            "locale": "en_US",
+            "__user": uid,
+            "fb_dtsg": DTSG,
+            "lsd": LSD,
+            "fb_api_caller_class": "RelayModern",
+            "fb_api_req_friendly_name": "useFXSSOChangeDirectionalSSOMutation",
+            "server_timestamps": "true",
+            "doc_id": "9253258021410000",
+            "av": uid,
+            "variables": json.dumps(variable1)
+        }
+        
+        url = "https://accountscenter.facebook.com/api/graphql"
+        response1 = requests.post(url, data=data1, headers=head, timeout=30)
+        
+        # Second sync direction: Facebook to Instagram
+        variable2 = {
+            "input": {
+                "client_mutation_id": "2",
+                "actor_id": uid,
+                "enable_sso": True,
+                "initiator_account": {"id": uid, "type": "FACEBOOK"},
+                "target_account": {"id": fbid_v2, "type": "INSTAGRAM"},
+                "fdid": "device_id_fetch_datr"
+            }
+        }
+        
+        data2 = {
+            "locale": "en_US",
+            "__user": uid,
+            "fb_dtsg": DTSG,
+            "lsd": LSD,
+            "fb_api_caller_class": "RelayModern",
+            "fb_api_req_friendly_name": "useFXSSOChangeDirectionalSSOMutation",
+            "server_timestamps": "true",
+            "doc_id": "9253258021410000",
+            "av": uid,
+            "variables": json.dumps(variable2)
+        }
+        
+        response2 = requests.post(url, data=data2, headers=head, timeout=30)
+        
+        return {"status": "success"}
             
     except requests.exceptions.ConnectionError:
         return {"status": "fail", "message": "Connection Error"}
@@ -303,6 +384,7 @@ def main():
         
         uid = check["uid"]
         ig_username = check["ig_uname"]
+        current_fb_name = check["fb_name"]
         
         print(f"{B}[{V}✓{B}] Your cookie is active{S}")
         print(f"{B}[+] Getting access tokens...{S}")
@@ -324,50 +406,71 @@ def main():
         
         print(f"{B}[{V}✓{B}] Tokens obtained successfully{S}")
         print()
+        print(f"{B}[{V}!{B}] Current Facebook Name: {C}{current_fb_name}{S}")
         print(f"{B}[{V}!{B}] Instagram Username: {C}{ig_username}{S}")
         print(f"{B}[{V}!{B}] Facebook ID: {C}{uid}{S}")
         print(f"{B}[{V}!{B}] Instagram Account ID: {C}{fbid_v2}{S}")
         print()
         
-        change_name = input(f"{B}[{R}?{B}] Do you want to change your Instagram name? (y/n): {V}")
+        change_name = input(f"{B}[{R}?{B}] Do you want to change your name on both platforms? (y/n): {V}")
         
         if change_name.lower() == 'y':
             new_name = input(f"{B}[{R}?{B}] Enter new name: {V}")
+            print()
             
+            # Change Instagram name
             print(f"{B}[+] Changing Instagram name to {C}{new_name}{B}...{S}")
-            name_change = change_instagram_name(
+            insta_change = change_instagram_name(
                 cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD, 
                 fbid_v2=fbid_v2, name=new_name
             )
             
-            if name_change["status"] == "success":
-                print(f"{B}[{V}✓{B}] Name changed successfully on Instagram!{S}")
+            if insta_change["status"] == "success":
+                print(f"{B}[{V}✓{B}] Instagram name changed successfully!{S}")
                 
-                print(f"{B}[+] Syncing name across both platforms...{S}")
-                sync = sync_name_across_accounts(
+                # Change Facebook name
+                print(f"{B}[+] Changing Facebook name to {C}{new_name}{B}...{S}")
+                fb_change = change_facebook_name(
                     cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD,
-                    fbid_v2=fbid_v2, name=new_name
+                    name=new_name
                 )
                 
-                if sync["status"] == "success":
-                    print(f"{B}[{V}✓{B}] Name synced successfully on both platforms!{S}")
+                if fb_change["status"] == "success":
+                    print(f"{B}[{V}✓{B}] Facebook name changed successfully!{S}")
+                    
+                    # Sync both ways
+                    print(f"{B}[+] Syncing names between platforms...{S}")
+                    sync = sync_names(
+                        cookie=cookie, uid=uid, DTSG=DTSG, LSD=LSD,
+                        fbid_v2=fbid_v2, name=new_name
+                    )
+                    
+                    if sync["status"] == "success":
+                        print(f"{B}[{V}✓{B}] Names synced successfully on both platforms!{S}")
+                    else:
+                        error_msgs = {
+                            "Connection Error": "No internet connection",
+                            "Request Timeout": "Request timeout, please try again"
+                        }
+                        print(f"{B}[{R}x{B}] {error_msgs.get(sync['message'], sync['message'])}{S}")
+                        print(f"{B}[{V}!{B}] Names were changed but may not be fully synced{S}")
                 else:
                     error_msgs = {
-                        "Cannot sync name, try again later": "Cannot sync name, try again later",
+                        "Cannot change name, try again later": "Cannot change Facebook name, try again later",
                         "Please re-link your accounts": "Please re-link your accounts",
                         "Connection Error": "No internet connection",
                         "Request Timeout": "Request timeout, please try again"
                     }
-                    print(f"{B}[{R}x{B}] {error_msgs.get(sync['message'], sync['message'])}{S}")
-                    print(f"{B}[{V}!{B}] Name was changed on Instagram but may not be synced to Facebook{S}")
+                    print(f"{B}[{R}x{B}] {error_msgs.get(fb_change['message'], fb_change['message'])}{S}")
+                    print(f"{B}[{V}!{B}] Instagram name was changed but Facebook name failed{S}")
             else:
                 error_msgs = {
-                    "Cannot change name, try again later": "Cannot change name, try again later",
+                    "Cannot change name, try again later": "Cannot change Instagram name, try again later",
                     "Please re-link your accounts": "Please re-link your accounts",
                     "Connection Error": "No internet connection",
                     "Request Timeout": "Request timeout, please try again"
                 }
-                print(f"{B}[{R}x{B}] {error_msgs.get(name_change['message'], name_change['message'])}{S}")
+                print(f"{B}[{R}x{B}] {error_msgs.get(insta_change['message'], insta_change['message'])}{S}")
         
         print()
         print(f"{B}[{V}✓{B}] Process completed successfully!{S}")
