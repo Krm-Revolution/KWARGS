@@ -2,16 +2,9 @@ import copy
 import html
 import json
 import os
-import queue
-import random
 import re
-import shutil
-import string
-import sys
-import threading
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
 
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -43,89 +36,19 @@ DEFAULT_CONFIG = {
         "user_guid": False,
     },
     "nftoken": False,
-    "add_emojis": "webhook",
-    "notifications": {
-        "webhook": {
-            "enabled": False,
-            "url": "",
-            "mode": "full",
-            "plans": "all",
-        },
-        "telegram": {
-            "enabled": False,
-            "bot_token": "",
-            "chat_id": "",
-            "mode": "full",
-            "plans": "all",
-        },
-    },
-    "display": {
-        "mode": "simple",
-    },
     "retries": {
         "error_proxy_attempts": 3,
         "nftoken_attempts": 1,
     },
     "performance": {
         "request_timeout_seconds": 15,
-        "fallback_account_page": False,
-        "retry_incomplete_info": False,
+        "fallback_account_page": True,
+        "retry_incomplete_info": True,
         "nftoken_for_free": False,
     },
 }
 
-DEFAULT_YAML_CONFIG = """txt_fields:
-  name: false
-  email: false
-  plan: true
-  country: true
-  member_since: false
-  quality: true
-  max_streams: true
-  plan_price: true
-  next_billing: true
-  payment_method: true
-  card: false
-  phone: false
-  hold_status: false
-  extra_members: true
-  email_verified: false
-  membership_status: false
-  profiles: true
-  user_guid: false
-
-nftoken: false
-add_emojis: "webhook"
-
-notifications:
-  webhook:
-    enabled: false
-    url: ""
-    mode: "full"
-    plans: "all"
-
-  telegram:
-    enabled: false
-    bot_token: ""
-    chat_id: ""
-    mode: "full"
-    plans: "all"
-
-display:
-  mode: "simple"
-
-retries:
-  error_proxy_attempts: 3
-  nftoken_attempts: 1
-
-performance:
-  request_timeout_seconds: 15
-  fallback_account_page: false
-  retry_incomplete_info: false
-  nftoken_for_free: false
-"""
-
-BANNER = r"""
+BANNER = """
 ███╗░░██╗███████╗████████╗███████╗██╗░░░░░██╗██╗░░██╗  ░█████╗░░█████╗░░█████╗░██╗░░██╗██╗███████╗
 ████╗░██║██╔════╝╚══██╔══╝██╔════╝██║░░░░░██║╚██╗██╔╝  ██╔══██╗██╔══██╗██╔══██╗██║░██╔╝██║██╔════╝
 ██╔██╗██║█████╗░░░░░██║░░░█████╗░░██║░░░░░██║░╚███╔╝░  ██║░░╚═╝██║░░██║██║░░██║█████═╝░██║█████╗░░
@@ -135,16 +58,6 @@ BANNER = r"""
 """
 
 APP_VERSION = "4.5.0"
-
-cookies_folder = "cookies"
-output_folder = "output"
-failed_folder = "failed"
-broken_folder = "broken"
-proxy_file = "proxy.txt"
-
-lock = threading.Lock()
-guid_lock = threading.Lock()
-processed_emails = set()
 
 NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 NFTOKEN_QUERY_PARAMS = {
@@ -207,37 +120,19 @@ CANONICAL_NETFLIX_COOKIE_NAMES = {name.lower(): name for name in ALL_NETFLIX_COO
 MONTH_ALIASES = {
     "january": 1, "enero": 1, "janvier": 1, "januar": 1, "janeiro": 1, "ocak": 1,
     "styczen": 1, "stycznia": 1, "januari": 1, "gennaio": 1, "ianuarie": 1, "jan": 1, "leden": 1,
-    "february": 2, "febrero": 2, "fevrier": 2, "fevereiro": 2, "subat": 2, "luty": 2, "februari": 2,
-    "febbraio": 2, "februarie": 2, "feb": 2, "únor": 2,
+    "february": 2, "febrero": 2, "fevrier": 2, "fevereiro": 2, "subat": 2, "luty": 2,
+    "februari": 2, "febbraio": 2, "februarie": 2, "feb": 2, "únor": 2,
     "march": 3, "marzo": 3, "mars": 3, "marco": 3, "marzec": 3, "marca": 3, "maret": 3, "martie": 3,
     "april": 4, "abril": 4, "avril": 4, "kwiecien": 4, "kwietnia": 4, "aprile": 4, "duben": 4,
     "may": 5, "mayo": 5, "mai": 5, "maj": 5, "maja": 5, "mei": 5, "maggio": 5, "květen": 5,
     "june": 6, "junio": 6, "juin": 6, "haziran": 6, "czerwiec": 6, "juni": 6, "giugno": 6, "iunie": 6, "červen": 6,
     "july": 7, "julio": 7, "juillet": 7, "temmuz": 7, "lipiec": 7, "juli": 7, "luglio": 7, "iulie": 7, "červenec": 7,
-    "august": 8, "agosto": 8, "août": 8, "sierpien": 8, "agustus": 8, "agosto": 8, "srpen": 8,
-    "september": 9, "septiembre": 9, "setembro": 9, "eylul": 9, "wrzesien": 9, "september": 9, "settembre": 9, "septembre": 9, "září": 9,
+    "august": 8, "agosto": 8, "août": 8, "sierpien": 8, "agustus": 8, "srpen": 8,
+    "september": 9, "septiembre": 9, "setembro": 9, "eylul": 9, "wrzesien": 9, "settembre": 9, "septembre": 9, "září": 9,
     "october": 10, "octubre": 10, "outubro": 10, "ekim": 10, "pazdziernik": 10, "oktober": 10, "ottobre": 10, "říjen": 10,
-    "november": 11, "noviembre": 11, "novembro": 11, "kasim": 11, "listopad": 11, "november": 11, "novembre": 11, "noiembrie": 11,
+    "november": 11, "noviembre": 11, "novembro": 11, "kasim": 11, "listopad": 11, "novembre": 11, "noiembrie": 11,
     "december": 12, "diciembre": 12, "dezembro": 12, "aralik": 12, "grudzien": 12, "desember": 12, "dicembre": 12, "décembre": 12, "prosinec": 12,
 }
-
-
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
-
-
-def color_text(text, code, enabled=True):
-    if not enabled:
-        return text
-    return f"{code}{text}\033[0m"
-
-
-def create_base_folders():
-    for folder in [cookies_folder, output_folder, failed_folder, broken_folder]:
-        os.makedirs(folder, exist_ok=True)
-    if not os.path.exists(proxy_file):
-        with open(proxy_file, "w", encoding="utf-8") as f:
-            f.write("# Add your proxies here\n")
 
 
 def merge_config(default_cfg, user_cfg):
@@ -1092,20 +987,24 @@ def get_nftoken_expiry_utc(expires=None):
     return (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def get_account_page(session, proxy=None, request_timeout=15, fallback_account_page=False):
+def get_account_page(session, request_timeout=15, fallback_account_page=False):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "identity",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
     }
     membership_url = "https://www.netflix.com/account/membership"
-    response = session.get(membership_url, headers=headers, proxies=proxy, timeout=request_timeout)
+    response = session.get(membership_url, headers=headers, timeout=request_timeout, allow_redirects=False)
     if response.status_code == 200 and response.text:
         primary_info = extract_info(response.text)
         if not fallback_account_page or has_complete_account_info(primary_info):
             return response.text, response.status_code, primary_info
         fallback_info = None
         try:
-            fallback_response = session.get("https://www.netflix.com/YourAccount", headers=headers, proxies=proxy, timeout=request_timeout)
+            fallback_response = session.get("https://www.netflix.com/YourAccount", headers=headers, timeout=request_timeout, allow_redirects=False)
             if fallback_response.status_code == 200 and fallback_response.text:
                 fallback_info = extract_info(fallback_response.text)
         except Exception:
@@ -1114,7 +1013,7 @@ def get_account_page(session, proxy=None, request_timeout=15, fallback_account_p
     return response.text, response.status_code, None
 
 
-def check_single_cookie(cookie_content, config=None, proxy=None):
+def check_single_cookie(cookie_content, config=None):
     if config is None:
         config = copy.deepcopy(DEFAULT_CONFIG)
     
@@ -1123,8 +1022,8 @@ def check_single_cookie(cookie_content, config=None, proxy=None):
     max_retry_attempts = retries_cfg.get("error_proxy_attempts", 3)
     nftoken_retry_attempts = retries_cfg.get("nftoken_attempts", 1)
     request_timeout_seconds = performance_cfg.get("request_timeout_seconds", 15)
-    fallback_account_page = bool(performance_cfg.get("fallback_account_page", False))
-    retry_incomplete_info = bool(performance_cfg.get("retry_incomplete_info", False))
+    fallback_account_page = bool(performance_cfg.get("fallback_account_page", True))
+    retry_incomplete_info = bool(performance_cfg.get("retry_incomplete_info", True))
     nftoken_for_free = bool(performance_cfg.get("nftoken_for_free", False))
     
     try:
@@ -1140,21 +1039,19 @@ def check_single_cookie(cookie_content, config=None, proxy=None):
     except Exception:
         request_timeout_seconds = 15
     
-    retryable_status_codes = {403, 429, 500, 502, 503, 504}
-    
     bundles = extract_netflix_cookie_bundles(cookie_content)
     if not bundles:
         return {"success": False, "error": "No valid Netflix cookies found in input"}
     
     bundle = bundles[0]
-    netscape_content = bundle.get("netscape_text", "")
-    cookies = bundle.get("cookies") or cookies_dict_from_netscape(netscape_content)
+    cookies = bundle.get("cookies") or cookies_dict_from_netscape(bundle.get("netscape_text", ""))
     
     if not cookies or not has_required_netflix_cookies(cookies):
         return {"success": False, "error": "Missing required cookies (NetflixId required)"}
     
     session = requests.Session()
-    session.cookies.update(cookies)
+    for cookie_name, cookie_value in cookies.items():
+        session.cookies.set(cookie_name, cookie_value, domain=".netflix.com", path="/")
     
     response_text = None
     status_code = None
@@ -1163,15 +1060,13 @@ def check_single_cookie(cookie_content, config=None, proxy=None):
     for attempt in range(max_retry_attempts):
         try:
             response_text, status_code, extracted_info = get_account_page(
-                session, proxy, request_timeout_seconds, fallback_account_page
+                session, request_timeout_seconds, fallback_account_page
             )
             if status_code == 200 and response_text:
                 if retry_incomplete_info and attempt < max_retry_attempts - 1:
                     if not (extracted_info and has_complete_account_info(extracted_info)):
                         continue
                 break
-            if status_code in retryable_status_codes and attempt < max_retry_attempts - 1:
-                continue
             break
         except Exception:
             if attempt < max_retry_attempts - 1:
@@ -1235,41 +1130,35 @@ def check_single_cookie(cookie_content, config=None, proxy=None):
         else:
             return {"success": False, "error": "Incomplete account page - could not extract country"}
     
-    if status_code in retryable_status_codes:
+    if status_code and status_code in {403, 429, 500, 502, 503, 504}:
         error_messages = {403: "HTTP 403 Forbidden", 429: "HTTP 429 Rate Limited", 500: "HTTP 500 Server Error",
                           502: "HTTP 502 Bad Gateway", 503: "HTTP 503 Service Unavailable", 504: "HTTP 504 Gateway Timeout"}
         return {"success": False, "error": error_messages.get(status_code, f"HTTP {status_code}")}
     
-    return {"success": False, "error": "Failed to access account page"}
+    return {"success": False, "error": "Failed to access account page - cookie may be expired"}
 
 
 def main():
-    create_base_folders()
-    
-    print(BANNER)
-    print("\nNetflix Cookie Checker")
-    print("=" * 50)
-    print("\nChoose mode:")
-    print("1. Direct paste cookie (single check)")
-    print("2. Batch check from cookies folder")
-    print("\nEnter 1 or 2:")
-    
-    try:
-        mode = input().strip()
-    except EOFError:
-        return
-    
     config = load_config()
     
-    if mode == "1":
-        print("\nPaste your Netflix cookie (Netscape/JSON/raw format):")
-        print("Press Enter twice when done:\n")
+    print(BANNER)
+    print("\nNetflix Cookie Checker - Paste Mode")
+    print("=" * 50)
+    print("Paste your Netflix cookie (Netscape format)")
+    print("Type 'exit' to quit")
+    print("=" * 50)
+    
+    while True:
+        print("\nEnter cookie (Press Enter twice when done, or type 'exit'):")
         
         lines = []
         empty_count = 0
         while True:
             try:
                 line = input()
+                if line.strip().lower() == "exit":
+                    print("\nExiting...")
+                    return
                 if line.strip() == "":
                     empty_count += 1
                     if empty_count >= 2:
@@ -1278,57 +1167,24 @@ def main():
                     empty_count = 0
                 lines.append(line)
             except EOFError:
-                break
+                print("\nExiting...")
+                return
         
         cookie_input = "\n".join(lines).strip()
         
         if not cookie_input:
-            print("No cookie input provided. Exiting.")
-            return
-        
-        proxy_input = input("\nProxy (optional, press Enter to skip): ").strip()
-        proxy = None
-        if proxy_input:
-            if "://" not in proxy_input:
-                proxy = {"http": f"http://{proxy_input}", "https": f"http://{proxy_input}"}
-            else:
-                proxy = {"http": proxy_input, "https": proxy_input}
+            print("No cookie input provided.")
+            continue
         
         print("\nChecking cookie...\n")
         
-        result = check_single_cookie(cookie_input, config, proxy)
+        result = check_single_cookie(cookie_input, config)
         
         print("=" * 50)
         print("RESULT:")
         print("=" * 50)
         print(json.dumps(result, indent=2, ensure_ascii=False))
-        
-        input("\nPress Enter to exit...")
-    
-    elif mode == "2":
-        initial_files = [
-            f for f in os.listdir(cookies_folder)
-            if not f.startswith(".") and f.lower().endswith((".txt", ".json"))
-        ]
-        if not initial_files:
-            print("No cookies found in cookies folder. Add .txt/.json cookies and run again.")
-            return
-        
-        try:
-            num_threads_input = input("Enter number of threads (default 30): ")
-            num_threads = int(num_threads_input) if num_threads_input.strip() else 30
-            if num_threads < 1 or num_threads > 300:
-                raise ValueError
-        except ValueError:
-            print("Invalid input, using 30 threads as default")
-            num_threads = 30
-        
-        from check_cookies_module import check_cookies
-        check_cookies(num_threads, config)
-        input("Press enter to exit\n")
-    
-    else:
-        print("Invalid option. Exiting.")
+        print("=" * 50)
 
 
 if __name__ == "__main__":
