@@ -2,9 +2,16 @@ import copy
 import html
 import json
 import os
+import queue
+import random
 import re
+import shutil
+import string
+import sys
+import threading
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -16,26 +23,45 @@ except ImportError:
 
 DEFAULT_CONFIG = {
     "txt_fields": {
-        "name": True,
-        "email": True,
+        "name": False,
+        "email": False,
         "max_streams": True,
         "plan_price": True,
         "plan": True,
         "country": True,
-        "member_since": True,
+        "member_since": False,
         "next_billing": True,
         "extra_members": True,
         "payment_method": True,
         "card": False,
-        "phone": True,
+        "phone": False,
         "quality": True,
-        "hold_status": True,
-        "email_verified": True,
-        "membership_status": True,
+        "hold_status": False,
+        "email_verified": False,
+        "membership_status": False,
         "profiles": True,
-        "user_guid": True,
+        "user_guid": False,
     },
     "nftoken": False,
+    "add_emojis": "webhook",
+    "notifications": {
+        "webhook": {
+            "enabled": False,
+            "url": "",
+            "mode": "full",
+            "plans": "all",
+        },
+        "telegram": {
+            "enabled": False,
+            "bot_token": "",
+            "chat_id": "",
+            "mode": "full",
+            "plans": "all",
+        },
+    },
+    "display": {
+        "mode": "simple",
+    },
     "retries": {
         "error_proxy_attempts": 3,
         "nftoken_attempts": 1,
@@ -48,7 +74,58 @@ DEFAULT_CONFIG = {
     },
 }
 
-BANNER = """
+DEFAULT_YAML_CONFIG = """txt_fields:
+  name: false
+  email: false
+  plan: true
+  country: true
+  member_since: false
+  quality: true
+  max_streams: true
+  plan_price: true
+  next_billing: true
+  payment_method: true
+  card: false
+  phone: false
+  hold_status: false
+  extra_members: true
+  email_verified: false
+  membership_status: false
+  profiles: true
+  user_guid: false
+
+nftoken: false
+add_emojis: "webhook"
+
+notifications:
+  webhook:
+    enabled: false
+    url: ""
+    mode: "full"
+    plans: "all"
+
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+    mode: "full"
+    plans: "all"
+
+display:
+  mode: "simple"
+
+retries:
+  error_proxy_attempts: 3
+  nftoken_attempts: 1
+
+performance:
+  request_timeout_seconds: 15
+  fallback_account_page: false
+  retry_incomplete_info: false
+  nftoken_for_free: false
+"""
+
+BANNER = r"""
 ███╗░░██╗███████╗████████╗███████╗██╗░░░░░██╗██╗░░██╗  ░█████╗░░█████╗░░█████╗░██╗░░██╗██╗███████╗
 ████╗░██║██╔════╝╚══██╔══╝██╔════╝██║░░░░░██║╚██╗██╔╝  ██╔══██╗██╔══██╗██╔══██╗██║░██╔╝██║██╔════╝
 ██╔██╗██║█████╗░░░░░██║░░░█████╗░░██║░░░░░██║░╚███╔╝░  ██║░░╚═╝██║░░██║██║░░██║█████═╝░██║█████╗░░
@@ -58,6 +135,16 @@ BANNER = """
 """
 
 APP_VERSION = "4.5.0"
+
+cookies_folder = "cookies"
+output_folder = "output"
+failed_folder = "failed"
+broken_folder = "broken"
+proxy_file = "proxy.txt"
+
+lock = threading.Lock()
+guid_lock = threading.Lock()
+processed_emails = set()
 
 NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 NFTOKEN_QUERY_PARAMS = {
@@ -119,40 +206,38 @@ CANONICAL_NETFLIX_COOKIE_NAMES = {name.lower(): name for name in ALL_NETFLIX_COO
 
 MONTH_ALIASES = {
     "january": 1, "enero": 1, "janvier": 1, "januar": 1, "janeiro": 1, "ocak": 1,
-    "styczen": 1, "stycznia": 1, "มกราคม": 1, "يناير": 1, "januari": 1, "gennaio": 1,
-    "ianuarie": 1, "jan": 1, "בינואר": 1, "ιανουαριος": 1, "leden": 1, "كانون الثاني": 1,
-    "february": 2, "febrero": 2, "fevrier": 2, "fevereiro": 2, "subat": 2,
-    "luty": 2, "lutego": 2, "กุมภาพันธ์": 2, "فبراير": 2, "februari": 2, "febbraio": 2,
-    "februarie": 2, "feb": 2, "בפברואר": 2, "φεβρουαριος": 2, "únor": 2, "شباط": 2,
-    "march": 3, "marzo": 3, "mars": 3, "marco": 3, "marzec": 3, "marca": 3,
-    "มีนาคม": 3, "مارس": 3, "maret": 3, "martie": 3, "marz": 3, "maart": 3, "آذار": 3,
-    "april": 4, "abril": 4, "avril": 4, "kwiecien": 4, "kwietnia": 4,
-    "เมษายน": 4, "أبريل": 4, "aprile": 4, "nisan": 4, "απριλιος": 4, "duben": 4, "نيسان": 4,
-    "may": 5, "mayo": 5, "mai": 5, "maj": 5, "maja": 5,
-    "พฤษภาคม": 5, "مايو": 5, "mei": 5, "maggio": 5, "mayis": 5, "במאי": 5,
-    "μαιος": 5, "květen": 5, "أيار": 5,
-    "june": 6, "junio": 6, "juin": 6, "haziran": 6, "czerwiec": 6, "czerwca": 6,
-    "มิถุนายน": 6, "يونيو": 6, "juni": 6, "giugno": 6, "ביוני": 6, "junho": 6, "iunie": 6,
-    "ιουνιος": 6, "červen": 6, "حزيران": 6,
-    "july": 7, "julio": 7, "juillet": 7, "temmuz": 7, "lipiec": 7, "lipca": 7,
-    "กรกฎาคม": 7, "يوليو": 7, "juli": 7, "luglio": 7, "ביולי": 7, "julho": 7, "iulie": 7,
-    "ιουλιος": 7, "červenec": 7, "تموز": 7,
-    "august": 8, "agosto": 8, "août": 8, "agost": 8, "sierpien": 8, "sierpnia": 8,
-    "สิงหาคม": 8, "أغسطس": 8, "agustus": 8, "agustos": 8, "באוגוסט": 8,
-    "αυγουστος": 8, "srpen": 8, "آب": 8,
-    "september": 9, "septiembre": 9, "setembro": 9, "eylul": 9, "wrzesien": 9, "wrzesnia": 9,
-    "กันยายน": 9, "سبتمبر": 9, "settembre": 9, "בספטמבר": 9, "septembre": 9,
-    "σεπτεμβριος": 9, "září": 9, "أيلول": 9,
-    "october": 10, "octubre": 10, "outubro": 10, "ekim": 10, "pazdziernik": 10, "pazdziernika": 10,
-    "ตุลาคม": 10, "أكتوبر": 10, "oktober": 10, "ottobre": 10, "באוקטובר": 10, "oktobar": 10,
-    "οκτωβριος": 10, "říjen": 10, "تشرين الأول": 10,
-    "november": 11, "noviembre": 11, "novembro": 11, "kasim": 11, "listopad": 11, "listopada": 11,
-    "พฤศจิกายน": 11, "نوفمبر": 11, "novembre": 11, "בנובמבר": 11, "noiembrie": 11,
-    "νοεμβριος": 11, "تشرين الثاني": 11,
-    "december": 12, "diciembre": 12, "dezembro": 12, "aralik": 12, "grudzien": 12, "grudnia": 12,
-    "ธันวาคม": 12, "ديسمبر": 12, "desember": 12, "dicembre": 12, "december": 12, "בדצמבר": 12,
-    "décembre": 12, "δεκεμβριος": 12, "prosinec": 12, "كانون الأول": 12,
+    "styczen": 1, "stycznia": 1, "januari": 1, "gennaio": 1, "ianuarie": 1, "jan": 1, "leden": 1,
+    "february": 2, "febrero": 2, "fevrier": 2, "fevereiro": 2, "subat": 2, "luty": 2, "februari": 2,
+    "febbraio": 2, "februarie": 2, "feb": 2, "únor": 2,
+    "march": 3, "marzo": 3, "mars": 3, "marco": 3, "marzec": 3, "marca": 3, "maret": 3, "martie": 3,
+    "april": 4, "abril": 4, "avril": 4, "kwiecien": 4, "kwietnia": 4, "aprile": 4, "duben": 4,
+    "may": 5, "mayo": 5, "mai": 5, "maj": 5, "maja": 5, "mei": 5, "maggio": 5, "květen": 5,
+    "june": 6, "junio": 6, "juin": 6, "haziran": 6, "czerwiec": 6, "juni": 6, "giugno": 6, "iunie": 6, "červen": 6,
+    "july": 7, "julio": 7, "juillet": 7, "temmuz": 7, "lipiec": 7, "juli": 7, "luglio": 7, "iulie": 7, "červenec": 7,
+    "august": 8, "agosto": 8, "août": 8, "sierpien": 8, "agustus": 8, "agosto": 8, "srpen": 8,
+    "september": 9, "septiembre": 9, "setembro": 9, "eylul": 9, "wrzesien": 9, "september": 9, "settembre": 9, "septembre": 9, "září": 9,
+    "october": 10, "octubre": 10, "outubro": 10, "ekim": 10, "pazdziernik": 10, "oktober": 10, "ottobre": 10, "říjen": 10,
+    "november": 11, "noviembre": 11, "novembro": 11, "kasim": 11, "listopad": 11, "november": 11, "novembre": 11, "noiembrie": 11,
+    "december": 12, "diciembre": 12, "dezembro": 12, "aralik": 12, "grudzien": 12, "desember": 12, "dicembre": 12, "décembre": 12, "prosinec": 12,
 }
+
+
+def clear_screen():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def color_text(text, code, enabled=True):
+    if not enabled:
+        return text
+    return f"{code}{text}\033[0m"
+
+
+def create_base_folders():
+    for folder in [cookies_folder, output_folder, failed_folder, broken_folder]:
+        os.makedirs(folder, exist_ok=True)
+    if not os.path.exists(proxy_file):
+        with open(proxy_file, "w", encoding="utf-8") as f:
+            f.write("# Add your proxies here\n")
 
 
 def merge_config(default_cfg, user_cfg):
@@ -405,6 +490,73 @@ def extract_netflix_cookie_bundles(content):
     return []
 
 
+def extract_first_match(response_text, patterns, flags=0):
+    for pattern in patterns:
+        match = re.search(pattern, response_text, flags)
+        if match:
+            return decode_netflix_value(match.group(1))
+    return None
+
+
+def format_boolean_label(value):
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return "Yes" if value == 1 else "No" if value == 0 else None
+    if isinstance(value, dict):
+        for key in ("value", "isUserOnHold", "holdStatus", "isOnHold", "pastDue", "isPastDue", "isVerified", "verified"):
+            if key in value:
+                parsed = format_boolean_label(value.get(key))
+                if parsed is not None:
+                    return parsed
+        return None
+    cleaned = decode_netflix_value(value)
+    if cleaned is None:
+        return None
+    lowered = str(cleaned).strip().lower()
+    if lowered in {"true", "yes", "1", "on"}:
+        return "Yes"
+    if lowered in {"false", "no", "0", "off"}:
+        return "No"
+    return None
+
+
+def extract_bool_value(response_text, patterns):
+    value = extract_first_match(response_text, patterns, re.IGNORECASE)
+    if value is None:
+        return None
+    parsed = format_boolean_label(value)
+    return parsed if parsed is not None else value
+
+
+def extract_profile_names(response_text):
+    names = []
+    for pattern in [
+        r'"profileName"\s*:\s*"([^"]+)"',
+        r'"profileName"\s*:\s*\{\s*"fieldType"\s*:\s*"String"\s*,\s*"value"\s*:\s*"([^"]+)"',
+    ]:
+        for found in re.findall(pattern, response_text, re.DOTALL):
+            decoded = decode_netflix_value(found)
+            if decoded and decoded not in names:
+                names.append(decoded)
+    return ", ".join(names) if names else None
+
+
+def has_complete_account_info(info):
+    if not info:
+        return False
+    required_fields = ("countryOfSignup", "membershipStatus", "localizedPlanName", "maxStreams", "videoQuality")
+    return all(info.get(field) and info.get(field) != "null" for field in required_fields)
+
+
+def merge_info(primary, fallback):
+    merged = dict(fallback or {})
+    for key, value in (primary or {}).items():
+        if value not in (None, "", [], {}):
+            merged[key] = value
+    return merged
+
+
 def extract_info_from_graphql_payload(response_text):
     try:
         payload = json.loads(response_text)
@@ -537,73 +689,6 @@ def extract_info_from_graphql_payload(response_text):
             info["paymentMethodType"] = "CC"
 
     return {key: value for key, value in info.items() if value not in (None, "", [], {})}
-
-
-def extract_first_match(response_text, patterns, flags=0):
-    for pattern in patterns:
-        match = re.search(pattern, response_text, flags)
-        if match:
-            return decode_netflix_value(match.group(1))
-    return None
-
-
-def format_boolean_label(value):
-    if isinstance(value, bool):
-        return "Yes" if value else "No"
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return "Yes" if value == 1 else "No" if value == 0 else None
-    if isinstance(value, dict):
-        for key in ("value", "isUserOnHold", "holdStatus", "isOnHold", "pastDue", "isPastDue", "isVerified", "verified"):
-            if key in value:
-                parsed = format_boolean_label(value.get(key))
-                if parsed is not None:
-                    return parsed
-        return None
-    cleaned = decode_netflix_value(value)
-    if cleaned is None:
-        return None
-    lowered = str(cleaned).strip().lower()
-    if lowered in {"true", "yes", "1", "on"}:
-        return "Yes"
-    if lowered in {"false", "no", "0", "off"}:
-        return "No"
-    return None
-
-
-def extract_bool_value(response_text, patterns):
-    value = extract_first_match(response_text, patterns, re.IGNORECASE)
-    if value is None:
-        return None
-    parsed = format_boolean_label(value)
-    return parsed if parsed is not None else value
-
-
-def extract_profile_names(response_text):
-    names = []
-    for pattern in [
-        r'"profileName"\s*:\s*"([^"]+)"',
-        r'"profileName"\s*:\s*\{\s*"fieldType"\s*:\s*"String"\s*,\s*"value"\s*:\s*"([^"]+)"',
-    ]:
-        for found in re.findall(pattern, response_text, re.DOTALL):
-            decoded = decode_netflix_value(found)
-            if decoded and decoded not in names:
-                names.append(decoded)
-    return ", ".join(names) if names else None
-
-
-def has_complete_account_info(info):
-    if not info:
-        return False
-    required_fields = ("countryOfSignup", "membershipStatus", "localizedPlanName", "maxStreams", "videoQuality")
-    return all(info.get(field) and info.get(field) != "null" for field in required_fields)
-
-
-def merge_info(primary, fallback):
-    merged = dict(fallback or {})
-    for key, value in (primary or {}).items():
-        if value not in (None, "", [], {}):
-            merged[key] = value
-    return merged
 
 
 def extract_info(response_text):
@@ -791,11 +876,11 @@ def derive_plan_info(info, is_subscribed):
     normalized = normalize_plan_key(raw_plan) if raw_plan else ""
 
     plan_aliases = {
-        "premium": {"premium", "cao_cap", "高級", "高级", "ozel", "พรีเมียม", "프리미엄", "プレミアム"},
-        "standard_with_ads": {"standard_with_ads", "standardwithads", "광고형_스탠다드", "standard_avec_pub", "広告付きスタンダード"},
-        "standard": {"standard", "estandar", "padrao", "標準", "标准", "スタンダード", "standaard", "القياسية"},
-        "basic": {"basic", "basico", "basique", "basis", "基本", "베이직", "ベーシック", "temel", "พื้นฐาน"},
-        "mobile": {"mobile", "ponsel", "seluler", "movil", "มือถือ", "모바일", "モバイル"},
+        "premium": {"premium", "cao_cap", "premium_plan"},
+        "standard_with_ads": {"standard_with_ads", "standardwithads"},
+        "standard": {"standard", "estandar", "padrao"},
+        "basic": {"basic", "basico", "basique", "basis"},
+        "mobile": {"mobile", "ponsel", "seluler", "movil"},
     }
     for canonical, aliases in plan_aliases.items():
         if normalized in aliases:
@@ -828,10 +913,9 @@ def is_extra_member_account(info):
         if lowered_flag in {"no", "false", "0"}:
             return False
     localized_plan = decode_netflix_value(info.get("localizedPlanName")) or ""
-    membership_status = decode_netflix_value(info.get("membershipStatus")) or ""
-    candidates = [localized_plan, membership_status]
+    candidates = [localized_plan]
     markers_text = ("extra member", "miembro extra", "suscriptor extra", "membro extra", "assinante extra",
-                     "abbonato extra", "abonné supplémentaire", "abonent extra", "ekstra üye", "额外成员", "額外成員", "추가 회원")
+                     "abbonato extra", "abonné supplémentaire", "abonent extra", "ekstra üye")
     for value in candidates:
         if not value:
             continue
@@ -1159,72 +1243,92 @@ def check_single_cookie(cookie_content, config=None, proxy=None):
     return {"success": False, "error": "Failed to access account page"}
 
 
-def check_multiple_cookies(cookie_inputs, config=None, proxy=None):
-    if isinstance(cookie_inputs, str):
-        cookie_inputs = [cookie_inputs]
-    
-    results = []
-    for cookie_content in cookie_inputs:
-        result = check_single_cookie(cookie_content, config, proxy)
-        results.append(result)
-    
-    return results
-
-
 def main():
+    create_base_folders()
+    
     print(BANNER)
-    print("\nNetflix Cookie Checker - Direct Input Mode")
+    print("\nNetflix Cookie Checker")
     print("=" * 50)
-    print("\nEnter your Netflix cookies (Netscape format, JSON, or raw cookie string)")
-    print("Press Enter twice when done:\n")
+    print("\nChoose mode:")
+    print("1. Direct paste cookie (single check)")
+    print("2. Batch check from cookies folder")
+    print("\nEnter 1 or 2:")
     
-    lines = []
-    empty_count = 0
-    while True:
-        try:
-            line = input()
-            if line.strip() == "":
-                empty_count += 1
-                if empty_count >= 2:
-                    break
-            else:
-                empty_count = 0
-            lines.append(line)
-        except EOFError:
-            break
-    
-    cookie_input = "\n".join(lines).strip()
-    
-    if not cookie_input:
-        print("No cookie input provided. Exiting.")
+    try:
+        mode = input().strip()
+    except EOFError:
         return
     
     config = load_config()
     
-    try:
-        proxy_input = input("\nProxy (optional, format: ip:port or user:pass@ip:port, press Enter to skip): ").strip()
+    if mode == "1":
+        print("\nPaste your Netflix cookie (Netscape/JSON/raw format):")
+        print("Press Enter twice when done:\n")
+        
+        lines = []
+        empty_count = 0
+        while True:
+            try:
+                line = input()
+                if line.strip() == "":
+                    empty_count += 1
+                    if empty_count >= 2:
+                        break
+                else:
+                    empty_count = 0
+                lines.append(line)
+            except EOFError:
+                break
+        
+        cookie_input = "\n".join(lines).strip()
+        
+        if not cookie_input:
+            print("No cookie input provided. Exiting.")
+            return
+        
+        proxy_input = input("\nProxy (optional, press Enter to skip): ").strip()
         proxy = None
         if proxy_input:
             if "://" not in proxy_input:
-                if "@" in proxy_input:
-                    proxy = {"http": f"http://{proxy_input}", "https": f"http://{proxy_input}"}
-                else:
-                    proxy = {"http": f"http://{proxy_input}", "https": f"http://{proxy_input}"}
+                proxy = {"http": f"http://{proxy_input}", "https": f"http://{proxy_input}"}
             else:
                 proxy = {"http": proxy_input, "https": proxy_input}
-    except EOFError:
-        proxy = None
+        
+        print("\nChecking cookie...\n")
+        
+        result = check_single_cookie(cookie_input, config, proxy)
+        
+        print("=" * 50)
+        print("RESULT:")
+        print("=" * 50)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        
+        input("\nPress Enter to exit...")
     
-    print("\nChecking cookie...\n")
+    elif mode == "2":
+        initial_files = [
+            f for f in os.listdir(cookies_folder)
+            if not f.startswith(".") and f.lower().endswith((".txt", ".json"))
+        ]
+        if not initial_files:
+            print("No cookies found in cookies folder. Add .txt/.json cookies and run again.")
+            return
+        
+        try:
+            num_threads_input = input("Enter number of threads (default 30): ")
+            num_threads = int(num_threads_input) if num_threads_input.strip() else 30
+            if num_threads < 1 or num_threads > 300:
+                raise ValueError
+        except ValueError:
+            print("Invalid input, using 30 threads as default")
+            num_threads = 30
+        
+        from check_cookies_module import check_cookies
+        check_cookies(num_threads, config)
+        input("Press enter to exit\n")
     
-    result = check_single_cookie(cookie_input, config, proxy)
-    
-    print("=" * 50)
-    print("RESULT:")
-    print("=" * 50)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    
-    input("\nPress Enter to exit...")
+    else:
+        print("Invalid option. Exiting.")
 
 
 if __name__ == "__main__":
