@@ -1,12 +1,214 @@
-# DECRYPT MO NALANG KONG GAGAMITIN MO
-import base64 as _ntUc45RUS2,zlib as _iAydkL2WPm,hashlib as _FOfehlSbHs
-_CL59wIdhCJ=bytes.fromhex('5349454746524945445f53414d415f5350414d53484152455f32303234').decode()
-_UTHrpAOBs2=_FOfehlSbHs.sha256(_CL59wIdhCJ.encode()).digest()
-_3kxH79mwFs=lambda d,k:bytes([b^k[i%len(k)]for i,b in enumerate(d)])
-_NRuCdXTXXw=['=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', 'EImCaKoR']
-_ZvxHQA3hqj=''.join(_NRuCdXTXXw)
-_RV2D32QjII=_ZvxHQA3hqj[::-1]
-_DZMdhia66t=_ntUc45RUS2.b64decode(_RV2D32QjII.encode())
-_65pDHjLIE9=_3kxH79mwFs(_DZMdhia66t,_UTHrpAOBs2)
-_sYHBjoFcHm=_iAydkL2WPm.decompress(_65pDHjLIE9)
-exec(compile(_sYHBjoFcHm.decode('utf-8'),'<x>','exec'))
+import requests, os, re, sys, json, time, hashlib
+from pathlib import Path
+from datetime import datetime
+import pytz
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
+ses = requests.Session()
+
+VERSION = "1.0"
+AUTHOR = "SIEGFRIED SAMÁ"
+TOOL_NAME = "SPAMSHARE"
+
+def _vx():
+    _k = "ce3a5d93cfa6dca73a0fb3548ea9626e"
+    _a = hashlib.md5(AUTHOR.encode('utf-8')).hexdigest()
+    return _a == _k
+
+def _dx(h):
+    return bytes.fromhex(h).decode('utf-8')
+
+def banner():
+    console.print()
+    console.print("[bold bright_cyan]    ═══════════════════════════════════════════════════════════")
+    console.print("[bold bright_cyan]              █████╗ ██╗   ██╗████████╗ ██████╗ ")
+    console.print("[bold bright_cyan]             ██╔══██╗██║   ██║╚══██╔══╝██╔═══██╗")
+    console.print("[bold bright_cyan]             ███████║██║   ██║   ██║   ██║   ██║")
+    console.print("[bold bright_cyan]             ██╔══██║██║   ██║   ██║   ██║   ██║")
+    console.print("[bold bright_cyan]             ██║  ██║╚██████╔╝   ██║   ╚██████╔╝")
+    console.print("[bold bright_cyan]             ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ")
+    console.print()
+    console.print("[bold bright_cyan]         ███████╗██╗  ██╗ █████╗ ██████╗ ███████╗")
+    console.print("[bold bright_cyan]         ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔════╝")
+    console.print("[bold bright_cyan]         ███████╗███████║███████║██████╔╝█████╗  ")
+    console.print("[bold bright_cyan]         ╚════██║██╔══██║██╔══██║██╔══██╗██╔══╝  ")
+    console.print("[bold bright_cyan]         ███████║██║  ██║██║  ██║██║  ██║███████╗")
+    console.print("[bold bright_cyan]         ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
+    console.print("[bold bright_cyan]    ═══════════════════════════════════════════════════════════")
+    console.print()
+
+    if not _vx():
+        console.print(f"[bold bright_red]    {_dx('626f626f206368616e67652063726564697473207061')}[/bold bright_red]")
+        console.print()
+        time.sleep(3)
+        sys.exit(1)
+
+    info = f"""[bold bright_yellow]AUTHOR  »[/bold bright_yellow] [bright_magenta]{AUTHOR}
+[bold bright_yellow]TOOL    »[/bold bright_yellow] [bright_cyan]{TOOL_NAME}
+[bold bright_yellow]VERSION »[/bold bright_yellow] [bright_green]{VERSION}"""
+
+    console.print(Panel(info, border_style="bright_yellow", width=70, padding=(0, 2)))
+    console.print()
+
+def menu_logo():
+    os.system("clear" if os.name == "posix" else "cls")
+    banner()
+
+def get_ph_time():
+    ph_tz = pytz.timezone('Asia/Manila')
+    ph_time = datetime.now(ph_tz)
+    return ph_time.strftime("%I:%M:%S %p")
+
+def login():
+    if os.path.exists("token.txt"):
+        os.remove("token.txt")
+    if os.path.exists("cookie.txt"):
+        os.remove("cookie.txt")
+
+    menu_logo()
+
+    status_info = "[bold bright_cyan]TAKE COOKIES FROM KIWI BROWSER."
+    console.print(Panel(status_info, title='[bold bright_yellow]AUTHENTICATION', style="bright_cyan", width=70))
+
+    cookie = console.input("[bold bright_cyan] └──> [bold bright_white]ENTER COOKIE: ")
+
+    try:
+        headers = {
+            "user-agent": "Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.011) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.86 Mobile Safari/537.36",
+            "referer": "https://www.facebook.com/",
+            "host": "business.facebook.com",
+            "origin": "https://business.facebook.com",
+            "upgrade-insecure-requests": "1",
+            "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "cache-control": "max-age=0",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+            "content-type": "text/html; charset=utf-8",
+            "cookie": cookie
+        }
+
+        data = ses.get("https://business.facebook.com/business_locations", headers=headers)
+
+        find_token = re.search(r"(EAAG\w+)", data.text)
+        token = find_token.group(1)
+
+        with open("token.txt", "w") as f:
+            f.write(token)
+        with open("cookie.txt", "w") as f:
+            f.write(cookie)
+
+        console.print(Panel("[bold bright_green]LOGIN SUCCESSFUL! ACCESS TOKEN SAVED.", style="bright_green", width=45))
+        time.sleep(2)
+        start_sharing()
+
+    except Exception:
+        if os.path.exists("token.txt"):
+            os.remove("token.txt")
+        if os.path.exists("cookie.txt"):
+            os.remove("cookie.txt")
+
+        console.print(Panel("[bold bright_red]INVALID COOKIE! PLEASE TRY AGAIN.", title="[bold bright_red]ERROR", style="bright_red", width=45))
+        time.sleep(2)
+        login()
+
+def start_sharing():
+    try:
+        if not os.path.exists("token.txt") or not os.path.exists("cookie.txt"):
+            login()
+            return
+
+        token = open("token.txt","r").read()
+        cok = open("cookie.txt","r").read()
+        cookie = {"cookie":cok}
+
+        menu_logo()
+
+        user_data = ses.get(f"https://b-graph.facebook.com/me?fields=name,id&access_token={token}", cookies=cookie).json()
+        name = user_data.get("name", "UNKNOWN USER")
+        uid = user_data.get("id", "UNKNOWN ID")
+
+        session_info = f"""[bold bright_yellow]ACCOUNT »[/bold bright_yellow] [bright_cyan]{name}
+[bold bright_yellow]USER ID »[/bold bright_yellow] [bright_cyan]{uid}"""
+
+        console.print(Panel(session_info, border_style="bright_yellow", width=70, padding=(0, 2)))
+        console.print()
+
+        console.print("[bold bright_cyan] ┌─[[bold bright_white]POST LINK[/bold bright_cyan]]")
+        link = console.input("[bold bright_cyan] └──> : ")
+
+        console.print("[bold bright_cyan] ┌─[[bold bright_white]AMOUNT[/bold bright_cyan]]")
+        amount = int(console.input("[bold bright_cyan] └──> : "))
+
+        console.print("[bold bright_cyan] ┌─[[bold bright_white]SHARE DELAY (SECONDS)[/bold bright_cyan]]")
+        console.print("[bold bright_cyan] │  [dim bright_white]OPTIONS: 0.5S | 1S | 1.5S | 2S")
+        delay_input = console.input("[bold bright_cyan] └──> : ")
+
+        try:
+            delay_time = float(delay_input)
+        except ValueError:
+            console.print("[bold bright_red]✗ INVALID NUMBER")
+            time.sleep(1)
+            return start_sharing()
+
+        console.print()
+        console.print(Panel(f"[bold bright_green]STARTING PROCESS FOR {amount} SHARES...", style="bright_green", width=70))
+        console.print()
+
+        count = 0
+        success_count = 0
+        fail_count = 0
+
+        next_share_time = time.time()
+
+        for i in range(amount):
+            count += 1
+
+            current_time = time.time()
+            wait_time = next_share_time - current_time
+            if wait_time > 0:
+                time.sleep(wait_time)
+
+            response = ses.post(f"https://b-graph.facebook.com/v13.0/me/feed?link={link}&published=0&access_token={token}", cookies=cookie).json()
+
+            timestamp = get_ph_time()
+
+            if "id" in response:
+                success_count += 1
+                raw_id = response.get("id")
+                post_id = raw_id.split('_')[-1] if '_' in raw_id else raw_id
+
+                console.print(f"[bright_white]{timestamp}[/bright_white] [bold bright_cyan]#{count:03d}[/bold bright_cyan] [bold bright_green]✓[/bold bright_green] [bright_white]SHARED[/bright_white] [bright_cyan]➜[/bright_cyan] [bright_yellow]{post_id}")
+            else:
+                fail_count += 1
+                err_msg = response.get("error", {}).get("message", "SHARING BLOCKED OR COOKIE EXPIRED.")
+                console.print(f"[bright_white]{timestamp}[/bright_white] [bold bright_red]#{count:03d}[/bold bright_red] [bold bright_red]✗[/bold bright_red] [bright_white]FAILED[/bright_white] [bright_red]➜[/bright_red] [bright_red]{err_msg[:40]}")
+                break
+
+            next_share_time += delay_time
+
+        console.print()
+
+        summary = f"""[bold bright_yellow]TOTAL   »[/bold bright_yellow] [bright_white]{count}
+[bold bright_yellow]SUCCESS »[/bold bright_yellow] [bright_green]{success_count}
+[bold bright_yellow]FAILED  »[/bold bright_yellow] [bright_red]{fail_count}"""
+
+        console.print(Panel(summary, title="[bold bright_green]SUMMARY", border_style="bright_green", width=70, padding=(0, 2)))
+        console.print()
+
+        action = console.input("[bold bright_cyan]╰─➤ [bright_white]SHARE MORE? [Y/N]: ").strip().upper()
+
+        if action in ['Y', 'YES', '']:
+            start_sharing()
+        else:
+            console.print("\n[bright_white]GOODBYE!")
+            sys.exit(0)
+
+    except Exception as e:
+        console.print(Panel(f"[bold bright_red]ERROR: {str(e)}", style="bright_red", width=70))
+        time.sleep(2)
+        login()
+
+
+if __name__ == "__main__":
+    login()
